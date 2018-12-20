@@ -239,6 +239,7 @@ sub STELLMOTOR_Set($@) {
 	my $name = $hash->{NAME};
 	my $OutType = AttrVal($name,'STMOutType', "dummy");
 	my $moveTarget = $args[1];
+	my $now = gettimeofday();
 	if($moveTarget eq "calibrate"){STELLMOTOR_Calibrate($hash);return;}
 	my $STMmaxDriveSeconds = AttrVal($name, "STMmaxDriveSeconds", 107);
 	my $STMmaxTics = AttrVal($name, "STMmaxTics", 100);
@@ -259,6 +260,8 @@ sub STELLMOTOR_Set($@) {
 	}elsif($moveTarget eq "position"){
 	 	if(length($args[2]) && $args[2] =~ /^\d+$/ && $args[2] >=0 && $args[2] <= $STMmaxTics){	
 		$moveTarget = $args[2];
+		readingsSingleUpdate($hash,"p_target",$args[2],1) if(AttrVal($name,"STMShowMoreReadings",0));
+		readingsSingleUpdate($hash,"t_target",$args[2]*($STMmaxDriveSeconds/$STMmaxTics),1) if(AttrVal($name,"STMShowMoreReadings",0));
 		}
 	}elsif(($moveTarget eq "?") or ($moveTarget < 1) or ($moveTarget > ($STMmaxTics+1))){
 		if($moveTarget eq "0"){$moveTarget.=" (min.value is 1) ";}
@@ -273,7 +276,7 @@ sub STELLMOTOR_Set($@) {
 		}
 	my $locked = ReadingsVal($name,'locked',0);
 	if ($locked eq 1) {
-		if(gettimeofday() - ( ReadingsVal($name,'lastStart',0) + $STMmaxDriveSeconds + 10 ) < 0){
+		if($now - ( ReadingsVal($name,'lastStart',0) + $STMmaxDriveSeconds + 10 ) < 0){
 			#check time since last cmd, if < MaxDrvSecs, queue command and return
 			readingsSingleUpdate($hash, "command_queue", $moveTarget, 0); #save requested value to queue and return
 			return;
@@ -284,13 +287,22 @@ sub STELLMOTOR_Set($@) {
 		return "Unknown argument ".$OutType.", choose one of <PiFace|Gpio|FhemDev|SysCmd>";	
 		}
 	my $actual_state = ReadingsVal($name,'position',1); #Use default 1 to omit error on first use
+	readingsSingleUpdate($hash,"p_position","entspricht t_target",1) if(AttrVal($name,"STMShowMoreReadings",0));
+	
 	readingsSingleUpdate($hash,'position',$moveTarget,1); #update position reading
 	$moveTarget = $moveTarget + ReadingsVal($name,'queue_lastdiff',0); #add last time diff or old value below 1 Tic
+	
+	readingsSingleUpdate($hash,"p_target+lastdiff",$moveTarget,1) if(AttrVal($name,"STMShowMoreReadings",0));
 	readingsSingleUpdate($hash, "queue_lastdiff", 0, 1);
+
+	readingsSingleUpdate($hash,"t?_lastdiff", 0,1) if(AttrVal($name,"STMShowMoreReadings",0));
 	my $moveCmdTime = $moveTarget-$actual_state;
+
+	readingsSingleUpdate($hash,"t_move", $moveCmdTime,1) if(AttrVal($name,"STMShowMoreReadings",0));
 	my $STMtimeTolerance = AttrVal($name, "STMtimeTolerance", 0.001);
 	if( ((abs($moveCmdTime) - $STMtimeTolerance) <= 1 )){
 		readingsSingleUpdate($hash, "queue_lastdiff", $moveCmdTime, 1);
+		readingsSingleUpdate($hash,"t?_lastdiff", $moveCmdTime,1) if(AttrVal($name,"STMShowMoreReadings",0));
 		return;
 		}
 	my $directionRL = "L";
@@ -298,10 +310,26 @@ sub STELLMOTOR_Set($@) {
 	Log3($name, 4, "STELLMOTOR $name Set Target:".int($moveTarget)." Cmd:".$moveCmdTime." RL:".$directionRL);
 	$moveCmdTime=abs($moveCmdTime); #be shure to have positive moveCmdTime value
 	readingsSingleUpdate($hash, "lastRun", $moveCmdTime, 1);
+	readingsSingleUpdate($hash,"t_lastDuration", $moveCmdTime,1) if(AttrVal($name,"STMShowMoreReadings",0));
+
 	readingsSingleUpdate($hash, "locked", 1, 1); #lock module for other commands
-	readingsSingleUpdate($hash, "lastStart", gettimeofday(), 1); #set the actual drive starttime
+	readingsSingleUpdate($hash, "lastStart", $now, 1); #set the actual drive starttime
+	readingsSingleUpdate($hash,"t_lastStart", $now,1) if(AttrVal($name,"STMShowMoreReadings",0));
+
+
 	$moveCmdTime=$moveCmdTime*$STMmaxDriveSeconds/$STMmaxTics;  #now we have the time in seconds the motor must run
-	readingsSingleUpdate($hash, "stopTime", (gettimeofday()+$moveCmdTime), 1); #set the end time of the move
+	
+	readingsSingleUpdate($hash,"t_move2", $moveCmdTime,1) if(AttrVal($name,"STMShowMoreReadings",0));
+
+	readingsSingleUpdate($hash, "stopTime", ($now+$moveCmdTime), 1); #set the end time of the move
+
+
+	readingsSingleUpdate($hash,"t_stop", $now+$moveCmdTime,1) if(AttrVal($name,"STMShowMoreReadings",0));
+
+	my $timestring = strftime "%Y-%m-%d %T",localtime($now + $moveCmdTime);
+	readingsSingleUpdate($hash,"t_stopHR", $timestring,1) if(AttrVal($name,"STMShowMoreReadings",0));
+
+
 	STELLMOTOR_commandSend($hash,$directionRL);
 	return;
 	}
@@ -627,6 +655,7 @@ sub _stmAttribs($@){
 	# "keys" || "default" || "type" || "help"  ,<keyname>
 	my($type,$reqKey)=@_;
 	my %attribs = (
+"STMShowMoreReadings"=>[("0","int","je nach Hardware","global","0,1")],
 "STMOutType"=>[("dummy","string","je nach Hardware","global","FhemDev,PiFace,Gpio,SysCmd")],
 "STMrlType"=>[("einzel","string","je nach schaltplan, wechsel=start+RL-relais, einzel=R-relais+L-relais","global","wechsel,einzel")],
 "STMinvertOut"=>[("0","int","setzen für devices die 0 für start und 1 für stop erwarten","global","0,1")],
