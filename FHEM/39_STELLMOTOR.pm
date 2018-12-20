@@ -107,7 +107,7 @@ sub STELLMOTOR_commandSend($@){
 	#check dev type and exec the commands
 	my($cmd,$execRL,$execSTART);
 	#define <name> STELLMOTOR <PiFace|Gpio|SysCmd|FhemDev> 
-	my $OutType = AttrVal($name, "OutType", "dummy");
+	my $OutType = AttrVal($name, "STMOutType", "dummy");
 	if(($OutType eq "PiFace") or ($OutType eq "Gpio")){
 		#pif and gpio eigentlich sinnlos, bleiben trotzdem erhalten für DAU und für abwärts-kompatibilität
 		#cmd type Gpio / #cmd type PiFace
@@ -237,7 +237,7 @@ sub STELLMOTOR_Undefine($$){
 sub STELLMOTOR_Set($@) {
 	my ($hash, @args)	= @_;
 	my $name = $hash->{NAME};
-	my $OutType = AttrVal($name,'OutType', "PiFace");
+	my $OutType = AttrVal($name,'STMOutType', "dummy");
 	my $moveTarget = $args[1];
 	if($moveTarget eq "calibrate"){STELLMOTOR_Calibrate($hash);return;}
 	my $STMmaxDriveSeconds = AttrVal($name, "STMmaxDriveSeconds", 107);
@@ -311,9 +311,10 @@ sub STELLMOTOR_ImmediateStop($@){
 	if(ReadingsVal($name,'locked', 1)==0){
 		return; #no move in progress, nothing to stop
 		}
-	my $OutType = AttrVal($name,'OutType', "PiFace");
+	my $OutType = AttrVal($name,'STMOutType', "dummy");
 	if(($OutType ne "PiFace") and ($OutType ne "Gpio") and ($OutType ne "FhemDev") and ($OutType ne "SysCmd")){
-		return "Unknown argument ".$OutType.", choose one of <PiFace|Gpio|FhemDev|SysCmd>";	
+		return "OutType is ".$OutType.", please add Attribute STMOutType and choose one of <PiFace|Gpio|FhemDev|SysCmd>";	
+		#return "Unknown argument ".$OutType.", choose one of <PiFace|Gpio|FhemDev|SysCmd>";	
 		}
 	my $now = gettimeofday();
 	my $STMmaxDriveSeconds = AttrVal($name, "STMmaxDriveSeconds", 107);
@@ -351,9 +352,9 @@ sub STELLMOTOR_ImmediateStop($@){
 sub STELLMOTOR_Stop($@){
 	my ($hash,$option) = @_;
 	my $name = $hash->{NAME};
-	my $OutType = AttrVal($name,'OutType', "PiFace");
+	my $OutType = AttrVal($name,'STMOutType', "dummy");
 	if(($OutType ne "PiFace") and ($OutType ne "Gpio") and ($OutType ne "FhemDev") and ($OutType ne "SysCmd")){
-		return "Unknown argument ".$OutType.", choose one of <PiFace|Gpio|FhemDev|SysCmd>";	
+		return "OutType is ".$OutType.", please add Attribute STMOutType and choose one of <PiFace|Gpio|FhemDev|SysCmd>";	
 		}
 	STELLMOTOR_commandSend($hash,"S");
 	my $now = gettimeofday();
@@ -542,9 +543,10 @@ sub STELLMOTOR_Calibrate($@){
 	my $name = $hash->{NAME};
 	my $STMmaxDriveSeconds = AttrVal($name, "STMmaxDriveSeconds", 107);
 	my $STMmaxTics = ReadingsVal($name,'STMmaxTics', "100");
-	my $OutType = AttrVal($name,'OutType', "PiFace");
+	my $OutType = AttrVal($name,'STMOutType', "dummy");
 	if(($OutType ne "PiFace") and ($OutType ne "Gpio") and ($OutType ne "FhemDev") and ($OutType ne "SysCmd") and ($OutType ne "dummy")){
-		return "Unknown argument ".$OutType.", choose one of <PiFace|Gpio|FhemDev|SysCmd>";	
+		return "OutType is ".$OutType.", please add Attribute STMOutType and choose one of <PiFace|Gpio|FhemDev|SysCmd>";	
+		#return "Unknown argument ".$OutType.", choose one of <PiFace|Gpio|FhemDev|SysCmd>";	
 		}
 
 my $STMcalibrateDirection = AttrVal($name, "STMcalibrateDirection", "L");
@@ -625,7 +627,7 @@ sub _stmAttribs($@){
 	# "keys" || "default" || "type" || "help"  ,<keyname>
 	my($type,$reqKey)=@_;
 	my %attribs = (
-"STMOutType"=>[("dummy","string","je nach Hardware","global","FhemDev,PiFace,Gpio")],
+"STMOutType"=>[("dummy","string","je nach Hardware","global","FhemDev,PiFace,Gpio,SysCmd")],
 "STMrlType"=>[("einzel","string","je nach schaltplan, wechsel=start+RL-relais, einzel=R-relais+L-relais","global","wechsel,einzel")],
 "STMinvertOut"=>[("0","int","setzen für devices die 0 für start und 1 für stop erwarten","global","0,1")],
 "STMmapOffCmd"=>[("0","string","string der im device-command anstatt '0' verwendet wird für stop","global","all")],
