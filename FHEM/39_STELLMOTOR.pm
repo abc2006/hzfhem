@@ -29,7 +29,7 @@
 #	You should have received a copy of the GNU General Public License
 #	along with fhem.  If not, see <http://www.gnu.org/licenses/>.
 # V3003 STMtimeTolerance should be 0.001 
-# V3004 test change for Git 
+# V3004 test change for Git  another change for git
 ####################################################################################################
 
 package main;
