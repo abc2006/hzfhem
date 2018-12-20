@@ -29,6 +29,7 @@
 #	You should have received a copy of the GNU General Public License
 #	along with fhem.  If not, see <http://www.gnu.org/licenses/>.
 # V3003 STMtimeTolerance should be 0.001 
+# V3004 test change for Git 
 ####################################################################################################
 
 package main;
@@ -278,7 +279,7 @@ sub STELLMOTOR_Set($@) {
 	$moveTarget = $moveTarget + ReadingsVal($name,'queue_lastdiff',0); #add last time diff or old value below 1 Tic
 	readingsSingleUpdate($hash, "queue_lastdiff", 0, 1);
 	my $moveCmdTime = $moveTarget-$actual_state;
-	my $STMtimeTolerance = AttrVal($name, "STMtimeTolerance", 0.01);
+	my $STMtimeTolerance = AttrVal($name, "STMtimeTolerance", 0.001);
 	if( ((abs($moveCmdTime) - $STMtimeTolerance) <= 1 )){
 		readingsSingleUpdate($hash, "queue_lastdiff", $moveCmdTime, 1);
 		return;
