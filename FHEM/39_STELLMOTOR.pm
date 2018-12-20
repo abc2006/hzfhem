@@ -31,6 +31,7 @@
 # V3003 STMtimeTolerance should be 0.001 
 # V3004 added set value where Value is allowed between 0 and STMmaxTics
 # V3005 OutType -> Attribute instead of define and Reading
+#  V3006 Added reading fir last runtime
 ####################################################################################################
 
 package main;
@@ -294,6 +295,7 @@ sub STELLMOTOR_Set($@) {
 	if($moveCmdTime>0){ $directionRL = "R"; }
 	Log3($name, 4, "STELLMOTOR $name Set Target:".int($moveTarget)." Cmd:".$moveCmdTime." RL:".$directionRL);
 	$moveCmdTime=abs($moveCmdTime); #be shure to have positive moveCmdTime value
+	readingsSingleUpdate($hash, "lastRun", $moveCmdTime, 1);
 	readingsSingleUpdate($hash, "locked", 1, 1); #lock module for other commands
 	readingsSingleUpdate($hash, "lastStart", gettimeofday(), 1); #set the actual drive starttime
 	$moveCmdTime=$moveCmdTime*$STMmaxDriveSeconds/$STMmaxTics;  #now we have the time in seconds the motor must run
