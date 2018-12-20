@@ -287,7 +287,7 @@ sub STELLMOTOR_Set($@) {
 		return "Unknown argument ".$OutType.", choose one of <PiFace|Gpio|FhemDev|SysCmd>";	
 		}
 	my $actual_state = ReadingsVal($name,'position',1); #Use default 1 to omit error on first use
-	readingsSingleUpdate($hash,"p_position","entspricht t_target",1) if(AttrVal($name,"STMShowMoreReadings",0));
+	readingsSingleUpdate($hash,"d_actual_state",i$actual_state,1) if(AttrVal($name,"STMShowMoreReadings",0));
 	
 	readingsSingleUpdate($hash,'position',$moveTarget,1); #update position reading
 	$moveTarget = $moveTarget + ReadingsVal($name,'queue_lastdiff',0); #add last time diff or old value below 1 Tic
@@ -298,7 +298,7 @@ sub STELLMOTOR_Set($@) {
 	readingsSingleUpdate($hash,"t?_lastdiff", 0,1) if(AttrVal($name,"STMShowMoreReadings",0));
 	my $moveCmdTime = $moveTarget-$actual_state;
 
-	readingsSingleUpdate($hash,"t_move", $moveCmdTime,1) if(AttrVal($name,"STMShowMoreReadings",0));
+	readingsSingleUpdate($hash,"p_move", $moveCmdTime,1) if(AttrVal($name,"STMShowMoreReadings",0));
 	my $STMtimeTolerance = AttrVal($name, "STMtimeTolerance", 0.001);
 	if( ((abs($moveCmdTime) - $STMtimeTolerance) <= 1 )){
 		readingsSingleUpdate($hash, "queue_lastdiff", $moveCmdTime, 1);
@@ -310,7 +310,7 @@ sub STELLMOTOR_Set($@) {
 	Log3($name, 4, "STELLMOTOR $name Set Target:".int($moveTarget)." Cmd:".$moveCmdTime." RL:".$directionRL);
 	$moveCmdTime=abs($moveCmdTime); #be shure to have positive moveCmdTime value
 	readingsSingleUpdate($hash, "lastRun", $moveCmdTime, 1);
-	readingsSingleUpdate($hash,"t_lastDuration", $moveCmdTime,1) if(AttrVal($name,"STMShowMoreReadings",0));
+	readingsSingleUpdate($hash,"p_lastDuration", $moveCmdTime,1) if(AttrVal($name,"STMShowMoreReadings",0));
 
 	readingsSingleUpdate($hash, "locked", 1, 1); #lock module for other commands
 	readingsSingleUpdate($hash, "lastStart", $now, 1); #set the actual drive starttime
@@ -319,7 +319,7 @@ sub STELLMOTOR_Set($@) {
 
 	$moveCmdTime=$moveCmdTime*$STMmaxDriveSeconds/$STMmaxTics;  #now we have the time in seconds the motor must run
 	
-	readingsSingleUpdate($hash,"t_move2", $moveCmdTime,1) if(AttrVal($name,"STMShowMoreReadings",0));
+	readingsSingleUpdate($hash,"t_move", $moveCmdTime,1) if(AttrVal($name,"STMShowMoreReadings",0));
 
 	readingsSingleUpdate($hash, "stopTime", ($now+$moveCmdTime), 1); #set the end time of the move
 
@@ -445,7 +445,7 @@ sub STELLMOTOR_GetUpdate($) {
 		}
 	my $STMpollInterval = AttrVal($name, "STMpollInterval", 0.1);
 	if ($STMpollInterval ne "off") {
-		InternalTimer(gettimeofday() + ($STMpollInterval), "STELLMOTOR_GetUpdate", $hash, 0);
+		InternalTimer($now) + ($STMpollInterval), "STELLMOTOR_GetUpdate", $hash, 0);
 #		STELLMOTOR_Get($hash,"position");
 		}
 #fetch missing pos.value in state after reboot
