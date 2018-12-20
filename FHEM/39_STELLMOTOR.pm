@@ -261,7 +261,7 @@ sub STELLMOTOR_Set($@) {
 		return;
 	}elsif($moveTarget eq "reset"){
 		readingsBeginUpdate($hash);
-		foreach(("state","t_target","p_target","t_actual","p_actual","t_lastStart","t_lastdiff","t_move","t_now","t_pertic","t_stop","t_stopHR","locked","command_queue","DoResetAtStop")){
+		foreach(("state","t_target","p_target","t_actual","p_actual","t_lastStart","t_lastdiff","t_move","t_now","t_pertic","t_stop","t_stopHR","locked","command_queue","DoResetAtStop","t_lastDuration")){
 			readingsBulkUpdate($hash, $_ , "initialized");		
 			}
 		readingsEndUpdate($hash, 1);
@@ -307,6 +307,8 @@ sub STELLMOTOR_Set($@) {
 		readingsSingleUpdate($hash, "status", "Abbruch, differenz < STMlastDiffMax", 1); 
 		return;
 		}
+	
+	readingsSingleUpdate($hash, "status", "running", 1); 
 	my $directionRL = $t_move > 0 ? "R":"L";
 	Log3($name, 4, "STELLMOTOR $name Set Target:".$t_target." Cmd:".$t_move." RL:".$directionRL);
 	
@@ -422,6 +424,7 @@ sub STELLMOTOR_Stop($@){
 	Log3($name, 4, "STELLMOTOR $name Stop Timing Call: stopTime:$t_stop now:$now queue_lastdiff:$t_lastdiff");
 	## Remove Internal timer. As the Motor is not running anymore now, we don't need to watch excessively for changes until the next set-command
 	RemoveInternalTimer($hash);
+	readingsSingleUpdate($hash, "status", "idle", 1); 
 	}
 	###################################################################################
 	###################################################################################
