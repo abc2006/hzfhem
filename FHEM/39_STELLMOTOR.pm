@@ -29,7 +29,7 @@
 #	You should have received a copy of the GNU General Public License
 #	along with fhem.  If not, see <http://www.gnu.org/licenses/>.
 # V3003 STMtimeTolerance should be 0.001 
-# V3004 test change for Git  another change for git
+# V3004 added set value where Value is allowed between 0 and STMmaxTics
 ####################################################################################################
 
 package main;
@@ -253,7 +253,7 @@ sub STELLMOTOR_Set($@) {
 		return;
 	}elsif(($moveTarget eq "?") or ($moveTarget < 1) or ($moveTarget > ($STMmaxTics+1))){
 		if($moveTarget eq "0"){$moveTarget.=" (min.value is 1) ";}
-		my $usage = "Unknown argument $moveTarget, choose one of calibrate:noArg reset:noArg stop:noArg";
+		my $usage = "Unknown argument $moveTarget, choose one of calibrate:noArg position reset:noArg stop:noArg";
 		foreach(1,2,8,9,10,16,21,27,33,44,50,55,66,77,88,99){ $usage .= " ".$_.":noArg "; }
 		return $usage;
 		}
