@@ -59,6 +59,7 @@ sub STELLMOTOR_commandSend($@){
 	my ($hash, @args)	= @_;
 	my $name = $hash->{NAME};
 	my $command = $args[0]; #command= R | L | S
+	Log3 $name, 4, "STELLMOTOR $name i bims, 1 commandSend";  
 	#desired states for start and stop cmds, apply invert to this
 	#state  R  L  STOP
 	#portRL  1  1  0		#früher:startport
@@ -157,7 +158,7 @@ sub STELLMOTOR_commandSend($@){
 			CommandSet(undef,$STMfhemDevRL." ".$portRL{$command});
 			}
 	
-	InternalTimer(gettimeofday() + 0.1, "STELLMOTOR_GetUpdate", $hash, 0);
+	InternalTimer(gettimeofday() + 0.5, "STELLMOTOR_GetUpdate", $hash, 0);
 	#2014-06-13 debug
 	if(AttrVal($name,"STMdebugToLog3",0)){
 		Log3($name, 3, "STELLMOTOR $name debug2 command: set ".$STMfhemDevRL." ".$portRL{$command});
@@ -237,8 +238,16 @@ sub STELLMOTOR_Set($@) {
 	my ($hash, @args)	= @_;
 	my $name = $hash->{NAME};
 
+	Log3 $name, 4, "STELLMOTOR $name i bims, 1 set";  
+	Log3 $name, 4, "STELLMOTOR $name args 0: $args[0]";  
+	Log3 $name, 4, "STELLMOTOR $name args 1: $args[1]";  
+	Log3 $name, 4, "STELLMOTOR $name args 2: $args[2]";  
 	if(AttrVal($name, "STMOutType", "dummy") eq "dummy"){
 		return "Bitte Attribut STMOutType wählen!";
+	}
+	if($args[1] eq "?"){
+		Log3 $name, 4, "STELLMOTOR $name Programm wird abgebrochen. Line:". __LINE__; 
+	       return "ungueltiger Parameter";	
 	}
 	my $moveTarget = $args[1];
 	
@@ -270,16 +279,17 @@ sub STELLMOTOR_Set($@) {
 		return;
 	}elsif($moveTarget eq "position"){
 		if(length($args[2]) && $args[2] =~ /^\d+$/ && $args[2] >= 0 && $args[2] <= $STMmaxTics){
-		$p_target = $args[2];	## just save the target Position
-		readingsSingleUpdate($hash, "p_target", $p_target, 1);
-		$t_target = $args[2]*$STMmaxDriveSeconds/$STMmaxTics; ## here we have the wanted position in seconds
-		readingsSingleUpdate($hash, "t_target", $t_target, 1);
-		readingsSingleUpdate($hash, "t_pertic", $STMmaxDriveSeconds/$STMmaxTics, 1);
+			$p_target = $args[2];	## just save the target Position
+			readingsSingleUpdate($hash, "p_target", $p_target, 1);
+			$t_target = $args[2]*$STMmaxDriveSeconds/$STMmaxTics; ## here we have the wanted position in seconds
+			readingsSingleUpdate($hash, "t_target", $t_target, 1);
+			readingsSingleUpdate($hash, "t_pertic", $STMmaxDriveSeconds/$STMmaxTics, 1);
 		}else {
-		return "Value must be between 0 and \$STMmaxTics ($STMmaxTics)";
+			return "Value must be between 0 and \$STMmaxTics ($STMmaxTics)";
 		}
 	}else{
 		my $usage = "Invalid argument $moveTarget, choose one of calibrate:noArg reset:noArg stop:noArg position";
+		Log3 $name, 4, "STELLMOTOR $name Programm wird abgebrochen. Line:". __LINE__;  
 		return $usage;
 		}
 	if (IsDisabled($name)) {
@@ -288,8 +298,8 @@ sub STELLMOTOR_Set($@) {
 		return;
 		}
 	my $locked = ReadingsVal($name,'locked',0);
-	if ($locked eq 1) {
-		if(gettimeofday() - ( ReadingsVal($name,'lastStart',0) + $STMmaxDriveSeconds + 10 ) < 0){
+	if ($locked) {
+		if($now - ( ReadingsVal($name,'lastStart',0) + $STMmaxDriveSeconds + 10 ) < 0){
 			#check time since last cmd, if < MaxDrvSecs, queue command and return
 			readingsSingleUpdate($hash, "command_queue", $moveTarget, 0); #save requested value to queue and return
 			return;
@@ -371,6 +381,7 @@ sub STELLMOTOR_Stop($@){
 	my $name = $hash->{NAME};
 	# send stop command to the Device
 	STELLMOTOR_commandSend($hash,"S");
+	Log3 $name, 4, "STELLMOTOR $name i bims, 1 stop";  
 	my $STMtimeTolerance = AttrVal($name, "STMtimeTolerance", 0.01);
 	my $p_target = ReadingsVal($name,'p_target', 0);
 	my $t_target = ReadingsVal($name,'t_target', 0);
@@ -413,14 +424,7 @@ sub STELLMOTOR_Stop($@){
 	
 	#update state reading with "not so accurate" position
 	readingsSingleUpdate($hash,'state',int($p_actual),1); 
-	if(ReadingsVal($name,'DoResetAtStop', "afterCalibrate") eq "afterCalibrate"){
-		readingsSingleUpdate($hash, "DoResetAtStop", $now, 1); #set actual time = last calibrate
-		if(AttrVal($name,"STMresetOtherDeviceAtCalibrate",0)){
-			CommandSet(undef, AttrVal($name,"STMresetOtherDeviceAtCalibrate",0)." reset");
-			Log3($name, 4, "STELLMOTOR $name STMresetOtherDeviceAtCalibrate:".AttrVal($name,"STMresetOtherDeviceAtCalibrate",0));
-			}
-		STELLMOTOR_Set($hash,$name,"reset");
-		}
+	
 	Log3($name, 4, "STELLMOTOR $name Stop Timing Call: stopTime:$t_stop now:$now queue_lastdiff:$t_lastdiff");
 	## Remove Internal timer. As the Motor is not running anymore now, we don't need to watch excessively for changes until the next set-command
 	RemoveInternalTimer($hash);
@@ -431,18 +435,19 @@ sub STELLMOTOR_Stop($@){
 sub STELLMOTOR_GetUpdate($) {
 	my ($hash) = @_;
 	my $name = $hash->{NAME};
+	Log3 $name, 4, "STELLMOTOR $name i bims, 1 getUpdate";  
 	my $STMtimeTolerance = AttrVal($name, "STMtimeTolerance", 0.01);
-	my $p_target = ReadingsVal($name,'p_target', 0);
+#	my $p_target = ReadingsVal($name,'p_target', 0);
 	my $t_target = ReadingsVal($name,'t_target', 0);
-	my $t_lastdiff = ReadingsVal($name,'t_lastdiff', 0);
-	my $t_actual = ReadingsVal($name, "t_actual", 0);
-	my $t_move = ReadingsVal($name,"t_move", 0);
+#	my $t_lastdiff = ReadingsVal($name,'t_lastdiff', 0);
+#	my $t_actual = ReadingsVal($name, "t_actual", 0);
+#	my $t_move = ReadingsVal($name,"t_move", 0);
 	my $t_stop = ReadingsVal($name,"t_stop", 0);
 	my $now = gettimeofday();
-	my $STMtimeTolerance = AttrVal($name, "STMtimeTolerance", 0.001);
-	my $STMlastDiffMax = AttrVal($name, "STMlastDiffMax", 1); ## lets get lastDiffMax
-	my $STMmaxDriveSeconds = AttrVal($name, "STMmaxDriveSeconds", 107);
-	my $STMmaxTics = AttrVal($name, "STMmaxTics", 100);
+#	my $STMtimeTolerance = AttrVal($name, "STMtimeTolerance", 0.001);
+#	my $STMlastDiffMax = AttrVal($name, "STMlastDiffMax", 1); ## lets get lastDiffMax
+#	my $STMmaxDriveSeconds = AttrVal($name, "STMmaxDriveSeconds", 107);
+#	my $STMmaxTics = AttrVal($name, "STMmaxTics", 100);
 	my $STMpollInterval = AttrVal($name, "STMpollInterval", 0.1);
 	
 	## If actual time is larger than stopTime+timeTolerance, stop motor
@@ -450,21 +455,17 @@ sub STELLMOTOR_GetUpdate($) {
 		STELLMOTOR_Stop($hash);
 	} elsif ($STMpollInterval ne "off") {
 	# Start internal Timer to get the updates
-		InternalTimer(gettimeofday() + ($STMpollInterval), "STELLMOTOR_GetUpdate", $hash, 0);
+		InternalTimer($now + ($STMpollInterval), "STELLMOTOR_GetUpdate", $hash, 0);
 	}
 	## i also don't understand the command_queue
-	my $command_queue = ReadingsVal($name,"command_queue", 0);
-	my $locked = ReadingsVal($name,"locked", 0);
-	my $STMlastDiffMax = AttrVal($name, "STMlastDiffMax", 1);# is a time
-	if($command_queue>0 and $locked==0){
-		Log3($name, 4, "STELLMOTOR $name command_queue Set Call: command_queue:$command_queue");
-		readingsSingleUpdate($hash, "command_queue", 0, 1); #remove old value from queue start the drive
-		STELLMOTOR_Set($hash,$name,$command_queue);
-	}elsif(abs($t_lastdiff)>$STMlastDiffMax){
-	#start new drive if last diff > (attr: STMlastDiffMax)		
-		Log3($name, 4, "STELLMOTOR $name queue_lastdiff: $t_lastdiff over STMlastDiffMax $STMlastDiffMax");
-		STELLMOTOR_Set($hash,$name,$t_target);  
-		}
+#	my $locked = ReadingsVal($name,"locked", 0);
+#	my $STMlastDiffMax = AttrVal($name, "STMlastDiffMax", 1);# is a time
+	# don't do this, just save the value
+#	if(abs($t_lastdiff)>$STMlastDiffMax){
+#	#start new drive if last diff > (attr: STMlastDiffMax)		
+#		Log3($name, 4, "STELLMOTOR $name queue_lastdiff: $t_lastdiff over STMlastDiffMax $STMlastDiffMax");
+#		STELLMOTOR_Set($hash,$name,$t_target);  
+#		}
 	#fetch missing pos.value in state after reboot
 	my $lastGuiState = ReadingsVal($name,'state', 1);
 	if(!($lastGuiState=~/^\d+$/)){
@@ -477,74 +478,74 @@ sub STELLMOTOR_GetUpdate($) {
 	return;
 	}
 sub STELLMOTOR_Get($@){
-	my ($hash, @a) = @_;
-	my $name = $hash->{NAME};
-	my $get = $a[1];
-	# Warum werden denn Readings geholt? 
-	my @stmgets = (keys(%{$hash->{READINGS}}));
-	$get="?" if(!_stm_in_array($get,(@stmgets,"attrHelp","readingsHelp","stmWwiki")));
-	my $usage = "Unknown argument $get, choose one of";
-	foreach(@stmgets){
-		$usage.=" ".$_.":noArg";
-		}
-	$usage.=" attrHelp:";
-	my($first)=0;
-	foreach(_stmAttribs("keys","")){
-		if($first){
-			$usage.=$_;
-			$first=0;
-		}else{
-			$usage.=",".$_;
-			}
-		}
-	$usage.=" readingsHelp:";
-	foreach(_stmRdings("keys","")){
-		$usage.=$_.",";
-		}
-	$usage.=" stmWwiki:get,set,readings,attr";
-	#check what has been requested?
-	if($get eq "attrHelp"){return _stmAttribs("help",$a[2]);}
-	if($get eq "readingsHelp"){return _stmRdings("help",$a[2]);}
-	if($get eq "stmWwiki"){
-		my $bereich = $a[2];
-		#bereich "get" "set" "readings" "attr"
-		my $wret;
-		if($bereich eq "get"){
-			$wret=STELLMOTOR_Get($hash,$name,"?");
-			$wret=~s/Unknown argument \?, choose one of//g;
-			$wret=~s/\s+/\n* /g;
- 			$wret=~s/:noArg//g;
-			$wret=~s/:/: /g;
-			return "extracted usage of get command:\n\n".$wret
-		}elsif($bereich eq "set"){
-			$wret=STELLMOTOR_Set($hash,$name,"?");
-			$wret=~s/Unknown argument \?, choose one of//g;
-			$wret=~s/\s+/\n* /g;
-			$wret=~s/:noArg//g;
-			$wret=~s/:/: /g;
-			return "extracted usage of set command:\n\n".$wret;
-		}elsif($bereich eq "readings"){
-			$wret="\n== Readings ==\nAlle Readings sind auch in fhem durch das kommando get readingsHelp <varname> erklärt, für's \"".
-			"schnelle nachschauen zwischendurch\".\n\n{| class=\"wikitable sortable\"\n|-\n! Reading !! (Typ) Default !! Beschreibung\n|-\n";
-			foreach(_stmRdings("keys","")){
-				$wret.="| ".	$_."|| ("._stmRdings("type",$_).") "._stmRdings("default",$_)." || "._stmRdings("description",$_)."\n|-\n";
-				}
-			$wret.="\n|}\n\n";
-		}elsif($bereich eq "attr"){
-			$wret="\n== Attributes ==\nAlle Attributes sind auch in fhem durch das kommando get attrHelp <varname> erklärt, für's \"".
-			"schnelle nachschauen zwischendurch\".\n\n{| class=\"wikitable sortable\"\n|-\n! Attribute !! (Typ) Default !! Beschreibung\n|-\n";
-			foreach(_stmAttribs("keys","")){
-				$wret.="| ".	$_."|| ("._stmAttribs("type",$_).") "._stmAttribs("default",$_)." || "._stmAttribs("description",$_)."\n|-\n";
-				}
-			$wret.="\n|}\n\n";
-		}else{
-			return "get Error in Line ".__LINE__;
-			}
-		return $wret;
-		}
-	return $usage if $get eq "?";
-	my $ret = $get.": ".ReadingsVal($name,$get, "Unknown");
-	return $ret;
+##	my ($hash, @a) = @_;
+#	my $name = $hash->{NAME};
+#	my $get = $a[1];
+#	# Warum werden denn Readings geholt? 
+#	my @stmgets = (keys(%{$hash->{READINGS}}));
+#	$get="?" if(!_stm_in_array($get,(@stmgets,"attrHelp","readingsHelp","stmWwiki")));
+#	my $usage = "Unknown argument $get, choose one of";
+#	foreach(@stmgets){
+#		$usage.=" ".$_.":noArg";
+#		}
+#	$usage.=" attrHelp:";
+#	my($first)=0;
+#	foreach(_stmAttribs("keys","")){
+#		if($first){
+#			$usage.=$_;
+#			$first=0;
+#		}else{
+#			$usage.=",".$_;
+#			}
+#		}
+#	$usage.=" readingsHelp:";
+#	foreach(_stmRdings("keys","")){
+#		$usage.=$_.",";
+#		}
+#	$usage.=" stmWwiki:get,set,readings,attr";
+#	#check what has been requested?
+#	if($get eq "attrHelp"){return _stmAttribs("help",$a[2]);}
+#	if($get eq "readingsHelp"){return _stmRdings("help",$a[2]);}
+#	if($get eq "stmWwiki"){
+#		my $bereich = $a[2];
+#		#bereich "get" "set" "readings" "attr"
+#		my $wret;
+#		if($bereich eq "get"){
+#			$wret=STELLMOTOR_Get($hash,$name,"?");
+#			$wret=~s/Unknown argument \?, choose one of//g;
+#			$wret=~s/\s+/\n* /g;
+# 			$wret=~s/:noArg//g;
+#			$wret=~s/:/: /g;
+#			return "extracted usage of get command:\n\n".$wret
+#		}elsif($bereich eq "set"){
+#			##$wret=STELLMOTOR_Set($hash,$name,"?");
+#			$wret=~s/Unknown argument \?, choose one of//g;
+#			$wret=~s/\s+/\n* /g;
+#			$wret=~s/:noArg//g;
+#			$wret=~s/:/: /g;
+#			return "extracted usage of set command:\n\n".$wret;
+#		}elsif($bereich eq "readings"){
+#			$wret="\n== Readings ==\nAlle Readings sind auch in fhem durch das kommando get readingsHelp <varname> erklärt, für's \"".
+#			"schnelle nachschauen zwischendurch\".\n\n{| class=\"wikitable sortable\"\n|-\n! Reading !! (Typ) Default !! Beschreibung\n|-\n";
+#			foreach(_stmRdings("keys","")){
+#				$wret.="| ".	$_."|| ("._stmRdings("type",$_).") "._stmRdings("default",$_)." || "._stmRdings("description",$_)."\n|-\n";
+#				}
+#			$wret.="\n|}\n\n";
+#		}elsif($bereich eq "attr"){
+#			$wret="\n== Attributes ==\nAlle Attributes sind auch in fhem durch das kommando get attrHelp <varname> erklärt, für's \"".
+#			"schnelle nachschauen zwischendurch\".\n\n{| class=\"wikitable sortable\"\n|-\n! Attribute !! (Typ) Default !! Beschreibung\n|-\n";
+#			foreach(_stmAttribs("keys","")){
+#				$wret.="| ".	$_."|| ("._stmAttribs("type",$_).") "._stmAttribs("default",$_)." || "._stmAttribs("description",$_)."\n|-\n";
+#				}
+#			$wret.="\n|}\n\n";
+#		}else{
+#			return "get Error in Line ".__LINE__;
+#			}
+#		return $wret;
+#		}
+#	return $usage if $get eq "?";
+#	my $ret = $get.": ".ReadingsVal($name,$get, "Unknown");
+#	return $ret;
 	}
 sub STELLMOTOR_Notify(@) {
   my ($hash, $dev) = @_;
