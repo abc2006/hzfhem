@@ -196,7 +196,7 @@ sub STELLMOTOR_Define($$){
 	my ($hash, $def) = @_;
 	my @args = split("[ \t]+", $def);
 	my $menge = int(@args);
-	if (int(@args) < 2) {
+	if (int(@args) < 1) {
 	return "Define: to less arguments. Usage:\n" .
 #		  "define <name> STELLMOTOR <RL-Out-Port> <Start-Out-Port>";
 		  "define <name> STELLMOTOR <PiFace|Gpio|SysCmd|dummy|FhemDev>";
@@ -205,10 +205,10 @@ sub STELLMOTOR_Define($$){
 	#no need for readingsUpdate as its a Attribute now	
 #	readingsSingleUpdate($hash, "OutType", $args[2], 1);
 	$hash->{NOTIFYDEV} = "global";
-	if(($args[2] ne "PiFace") and ($args[2] ne "Gpio") and ($args[2] ne "SysCmd") and ($args[2] ne "FhemDev") and ($args[2] ne "dummy")){
-		return "Define: Err87 unsupported Output Device ".$args[2].". Usage:\n" .
-			"define <name> STELLMOTOR <PiFace|Gpio|SysCmd|FhemDev>";
-		}
+	#if(($args[2] ne "PiFace") and ($args[2] ne "Gpio") and ($args[2] ne "SysCmd") and ($args[2] ne "FhemDev") and ($args[2] ne "dummy")){
+	#	return "Define: Err87 unsupported Output Device ".$args[2].". Usage:\n" .
+	#		"define <name> STELLMOTOR <PiFace|Gpio|SysCmd|FhemDev>";
+	#		}
 	Log3($name, 3, "STELLMOTOR $name active, type=".$args[2]);
 	readingsSingleUpdate($hash, "state", "initialized",1);
 	my $position = ReadingsVal($name,"position", "0");
