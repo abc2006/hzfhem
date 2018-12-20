@@ -33,6 +33,7 @@
 # V3005 OutType -> Attribute instead of define and Reading
 # V3006 Added reading fir last runtime
 # V3007 STMlastdiffmax is now available as float. no safety checks performed!
+# V3008 STMmaxTics is now expanded to 360, as there are some motors turning up to 355 degrees
 ####################################################################################################
 
 package main;
@@ -636,7 +637,7 @@ sub _stmAttribs($@){
 "STMfhemDevRL"=>[("RelaisRL","string","fhem device name für RL (oder R) aktor","FhemDev","all")],
 "STMfhemDevSTART"=>[("RelaisSTART","string","fhem device name für START (oder L) aktor","FhemDev","all")],
 "STMmaxDriveSeconds"=>[("107","int","gestoppte Zeit in Sekunden, die der Motor für die Fahrt von 0 bis 100 Prozent braucht","global","all")],
-"STMmaxTics"=>[("100","int","Mischerstellung - bei Prozentangaben (PID20) 100, bei Winkelangaben anzupassen","global","1:100")],
+"STMmaxTics"=>[("100","int","Mischerstellung - bei Prozentangaben (PID20) 100, bei Winkelangaben anzupassen","global","1:360")],
 "STMtimeTolerance"=>[("0.01","float","stop-time differenzen kleiner als dieser wert werden ignoriert","global","0.01,0.02,0.03,0.04,0.05,0.06,0.07,0.08,0.09,0.1")],
 "STMresetOtherDeviceAtCalibrate"=>[("0","string","zusätzliches fhem device das am ende der kalibrierung 'set ** reset' gesendet bekommt","global","all")],
 "STMpollInterval"=>[("0.1","float","Zeitintervall nach dem FHEM prüft, ob die interne Stoppzeit erreicht wurde. Hier sollte möglichst kleiner Wert aein, nur erhöhen falls FHEM zu langsam läuft","global","all")],
