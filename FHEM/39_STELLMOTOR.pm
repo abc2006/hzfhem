@@ -256,15 +256,17 @@ sub STELLMOTOR_Set($@) {
 	my $STMmaxTics = AttrVal($name, "STMmaxTics", 100);
 	
 	if($moveTarget eq "stop"){
-		STELLMOTOR_ImmediateStop($hash);
-		Log3($name, 4, "STELLMOTOR $name User submitted Stop Request");
-		return;
+		#STELLMOTOR_ImmediateStop($hash);
+		#Log3($name, 4, "STELLMOTOR $name User submitted Stop Request");
+		return "Feature deactivated";
 	}elsif($moveTarget eq "reset"){
 		readingsBeginUpdate($hash);
 		foreach(("state","t_target","p_target","t_actual","p_actual","t_lastStart","t_lastdiff","t_move","t_now","t_pertic","t_stop","t_stopHR","locked","command_queue","DoResetAtStop","t_lastDuration")){
 			readingsBulkUpdate($hash, $_ , "initialized");		
 			}
+			readingsBulkUpdate($hash, "status", "reset");
 		readingsEndUpdate($hash, 1);
+		
 		return;
 	}elsif($moveTarget eq "position"){
 		if(length($args[2]) && $args[2] =~ /^\d+$/ && $args[2] >= 0 && $args[2] <= $STMmaxTics){
@@ -277,9 +279,7 @@ sub STELLMOTOR_Set($@) {
 		return "Value must be between 0 and \$STMmaxTics ($STMmaxTics)";
 		}
 	}else{
-		#if($moveTarget eq "0"){$moveTarget.=" (min.value is 1) ";}
 		my $usage = "Invalid argument $moveTarget, choose one of calibrate:noArg reset:noArg stop:noArg position";
-		#foreach(1,2,8,9,10,16,21,27,33,44,50,55,66,77,88,99){ $usage .= " ".$_.":noArg "; }
 		return $usage;
 		}
 	if (IsDisabled($name)) {
