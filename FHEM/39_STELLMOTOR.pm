@@ -31,7 +31,8 @@
 # V3003 STMtimeTolerance should be 0.001 
 # V3004 added set value where Value is allowed between 0 and STMmaxTics
 # V3005 OutType -> Attribute instead of define and Reading
-#  V3006 Added reading fir last runtime
+# V3006 Added reading fir last runtime
+# V3007 STMlastdiffmax is now available as float. no safety checks performed!
 ####################################################################################################
 
 package main;
@@ -640,7 +641,7 @@ sub _stmAttribs($@){
 "STMresetOtherDeviceAtCalibrate"=>[("0","string","zusätzliches fhem device das am ende der kalibrierung 'set ** reset' gesendet bekommt","global","all")],
 "STMpollInterval"=>[("0.1","float","Zeitintervall nach dem FHEM prüft, ob die interne Stoppzeit erreicht wurde. Hier sollte möglichst kleiner Wert aein, nur erhöhen falls FHEM zu langsam läuft","global","all")],
 "STMcalibrateDirection"=>[("L","string","auf R wird die kalibrierung nach rechts gefahren, default=links","global","L,R")],
-"STMlastDiffMax"=>[("1","int","ist die stoppzeit weiter als dieser wert vom Soll entfernt, wird sofort neuer drive gestartet","global","1:5")],
+"STMlastDiffMax"=>[("1","float","ist die stoppzeit weiter als dieser wert vom Soll entfernt, wird sofort neuer drive gestartet","global","all")],
 "STMdebugToLog3"=>[("0","int","jedes gesendete command ins Log schreiben","global","0,1")],
 	);
 	if($type eq "keys"){
