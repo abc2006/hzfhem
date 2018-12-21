@@ -245,10 +245,10 @@ sub STELLMOTOR_Set($@) {
 	if(AttrVal($name, "STMOutType", "dummy") eq "dummy"){
 		return "Bitte Attribut STMOutType wählen!";
 	}
-	if($args[1] eq "?"){
-		Log3 $name, 4, "STELLMOTOR $name Programm wird abgebrochen. Line:". __LINE__; 
-	       return "ungueltiger Parameter";	
-	}
+#	if($args[1] eq "?"){
+#		Log3 $name, 4, "STELLMOTOR $name Programm wird abgebrochen. Line:". __LINE__; 
+#	       return "ungueltiger Parameter";	
+#	}
 	my $moveTarget = $args[1];
 	
 	if($moveTarget eq "calibrate"){STELLMOTOR_Calibrate($hash);return;}
@@ -256,6 +256,7 @@ sub STELLMOTOR_Set($@) {
 	my $t_target;
 	my $t_lastdiff = ReadingsVal($name,'t_lastdiff',0);
 	my $t_actual = ReadingsVal($name, "t_actual", 0);
+	my $p_actual = ReadingsVal($name, "p_actual", 0);
 	my $t_move;
 	my $t_stop;
 	my $now = gettimeofday();
@@ -264,6 +265,12 @@ sub STELLMOTOR_Set($@) {
 	my $STMmaxDriveSeconds = AttrVal($name, "STMmaxDriveSeconds", 107);
 	my $STMmaxTics = AttrVal($name, "STMmaxTics", 100);
 	
+	Log3 $name, 4, "STELLMOTOR $name moveTarget $moveTarget";  
+	if (IsDisabled($name)) {
+		readingsSingleUpdate($hash, "status", "disabled", 1); 
+		Log3 $name, 4, "STELLMOTOR $name device is disabled";  
+		$moveTarget = "?"; #sorge dafür, dass kein set ausgeführt wird.
+	}
 	if($moveTarget eq "stop"){
 		#STELLMOTOR_ImmediateStop($hash);
 		#Log3($name, 4, "STELLMOTOR $name User submitted Stop Request");
@@ -271,7 +278,7 @@ sub STELLMOTOR_Set($@) {
 	}elsif($moveTarget eq "reset"){
 		readingsBeginUpdate($hash);
 		foreach(("state","t_target","p_target","t_actual","p_actual","t_lastStart","t_lastdiff","t_move","t_now","t_pertic","t_stop","t_stopHR","locked","command_queue","DoResetAtStop","t_lastDuration")){
-			readingsBulkUpdate($hash, $_ , "initialized");		
+			readingsBulkUpdate($hash, $_ , 0);		
 			}
 			readingsBulkUpdate($hash, "status", "reset");
 		readingsEndUpdate($hash, 1);
@@ -288,25 +295,24 @@ sub STELLMOTOR_Set($@) {
 			return "Value must be between 0 and \$STMmaxTics ($STMmaxTics)";
 		}
 	}else{
+		## Diese Zeile ist besonders wichtig, da aus ihr die Set-befehle abgeleitet werden... 
 		my $usage = "Invalid argument $moveTarget, choose one of calibrate:noArg reset:noArg stop:noArg position";
 		Log3 $name, 4, "STELLMOTOR $name Programm wird abgebrochen. Line:". __LINE__;  
 		return $usage;
 		}
-	if (IsDisabled($name)) {
-		readingsSingleUpdate($hash, "command_queue", $moveTarget, 1); #save requested value to queue and return
-		Log3 $name, 4, "STELLMOTOR $name device is disabled - set:".$moveTarget." only in queue.";  
-		return;
-		}
 	my $locked = ReadingsVal($name,'locked',0);
 	if ($locked) {
-		if($now - ( ReadingsVal($name,'lastStart',0) + $STMmaxDriveSeconds + 10 ) < 0){
-			#check time since last cmd, if < MaxDrvSecs, queue command and return
-			readingsSingleUpdate($hash, "command_queue", $moveTarget, 0); #save requested value to queue and return
-			return;
-			}
-		}
+		Log3 $name, 4, "STELLMOTOR $name Device is locked";  
+		return;
+	}
 	# the move time is the target time plus the lastdiff minus the actual time 
+
+
 	$t_move = $t_target+$t_lastdiff-$t_actual;
+	Log3 $name, 4, "STELLMOTOR $name tactual: $t_actual";  
+	Log3 $name, 4, "STELLMOTOR $name tlastdiff: $t_lastdiff";  
+	Log3 $name, 4, "STELLMOTOR $name ttarget: $t_target";  
+	Log3 $name, 4, "STELLMOTOR $name tmove: $t_move";  
 
 	readingsSingleUpdate($hash, "t_move", $t_move, 1); 
 	if( ((abs($t_move) - $STMtimeTolerance) < $STMlastDiffMax  )){## if t_move is smaller than  STMlastdiffMax queue command
@@ -315,22 +321,31 @@ sub STELLMOTOR_Set($@) {
 		#$hash->{helper}{t_move} = 0;
 		#readingsSingleUpdate($hash, "t_move", $hash->{helper}{t_move}, 1); 
 		readingsSingleUpdate($hash, "status", "Abbruch, differenz < STMlastDiffMax", 1); 
+		Log3 $name, 4, "STELLMOTOR $name tmove: $t_move < lastdiffmax $STMlastDiffMax";  
 		return;
 		}
 	
 	readingsSingleUpdate($hash, "status", "running", 1); 
 	my $directionRL = $t_move > 0 ? "R":"L";
-	Log3($name, 4, "STELLMOTOR $name Set Target:".$t_target." Cmd:".$t_move." RL:".$directionRL);
+	Log3($name, 4, "STELLMOTOR $name Set Target: $t_target");
+	Log3($name, 4, "STELLMOTOR $name Cmd: $t_move");
+	Log3($name, 4, "STELLMOTOR $name RL: $directionRL");
 	
 	readingsSingleUpdate($hash, "locked", 1, 1); #lock module for other commands
 	readingsSingleUpdate($hash, "t_lastStart", $now, 1); #set the actual drive starttime
+	Log3($name, 4, "STELLMOTOR $name tlaststart: $now");
 	readingsSingleUpdate($hash, "t_lastDuration", $t_move, 1); ## set the run time of the move, just informational for the User
+	Log3($name, 4, "STELLMOTOR $name tlastduration: $t_move");
 	
 	$t_stop = $now+abs($t_move);
+	Log3($name, 4, "STELLMOTOR $name tstop $t_stop");
+	
 	
 	readingsSingleUpdate($hash, "t_stop", ($t_stop), 1); #set the end time of the move
 	my $timestring = strftime "%Y-%m-%d %T",localtime($t_stop);
 	readingsSingleUpdate($hash, "t_stopHR", $timestring, 1); #set the end time of the move
+	$hash->{helper}{savetactualduringtherun} = $t_actual;
+	$hash->{helper}{savepactualduringtherun} = $p_actual;
 	STELLMOTOR_commandSend($hash,$directionRL);
 	return;
 	}
@@ -344,6 +359,7 @@ sub STELLMOTOR_ImmediateStop($@){
 	if(ReadingsVal($name,'locked', 1)==0){
 		return; #no move in progress, nothing to stop
 		}
+	
 	my $lastGuiState = ReadingsVal($name,'state', 1);
 	my $now = gettimeofday();
 	my $STMmaxDriveSeconds = AttrVal($name, "STMmaxDriveSeconds", 107);
@@ -386,8 +402,8 @@ sub STELLMOTOR_Stop($@){
 	my $p_target = ReadingsVal($name,'p_target', 0);
 	my $t_target = ReadingsVal($name,'t_target', 0);
 	my $t_lastdiff = ReadingsVal($name,'t_lastdiff', 0);
-	my $t_actual = ReadingsVal($name, "t_actual", 0);
-	my $p_actual = ReadingsVal($name, "p_actual", 0);
+	my $t_actual = $hash->{helper}{savetactualduringtherun};
+	my $p_actual = $hash->{helper}{savepactualduringtherun};
 	my $t_move = ReadingsVal($name,"t_move", 0);
 	my $t_stop = ReadingsVal($name,"t_stop", 0);
 	my $now = gettimeofday();
@@ -436,10 +452,16 @@ sub STELLMOTOR_GetUpdate($) {
 	my ($hash) = @_;
 	my $name = $hash->{NAME};
 	Log3 $name, 4, "STELLMOTOR $name i bims, 1 getUpdate";  
-	my $STMtimeTolerance = AttrVal($name, "STMtimeTolerance", 0.01);
+	if (IsDisabled($name)) {
+		Log3 $name, 4, "STELLMOTOR $name device is disabled";  
+		RemoveInternalTimer($hash);
+		readingsSingleUpdate($hash, "status", "disabled", 1); 
+		return;
+		}
 #	my $p_target = ReadingsVal($name,'p_target', 0);
-	my $t_target = ReadingsVal($name,'t_target', 0);
+#	my $t_target = ReadingsVal($name,'t_target', 0);
 #	my $t_lastdiff = ReadingsVal($name,'t_lastdiff', 0);
+	my $t_lastStart = ReadingsVal($name,'t_lastStart', 0);
 #	my $t_actual = ReadingsVal($name, "t_actual", 0);
 #	my $t_move = ReadingsVal($name,"t_move", 0);
 	my $t_stop = ReadingsVal($name,"t_stop", 0);
@@ -449,32 +471,38 @@ sub STELLMOTOR_GetUpdate($) {
 #	my $STMmaxDriveSeconds = AttrVal($name, "STMmaxDriveSeconds", 107);
 #	my $STMmaxTics = AttrVal($name, "STMmaxTics", 100);
 	my $STMpollInterval = AttrVal($name, "STMpollInterval", 0.1);
-	
+	Log3($name, 4, "STELLMOTOR $name tstop $t_stop");
+	Log3($name, 4, "STELLMOTOR $name now $now");
+	##Log3($name, 4, "STELLMOTOR $name ttarget $t_target");
 	## If actual time is larger than stopTime+timeTolerance, stop motor
-	if(($t_stop ne 0) and (($t_stop-$now)<$STMtimeTolerance)){
+	if($now > $t_stop){
 		STELLMOTOR_Stop($hash);
-	} elsif ($STMpollInterval ne "off") {
-	# Start internal Timer to get the updates
+		Log3($name, 4, "STELLMOTOR $name tstop < now");
+		Log3($name, 4, "STELLMOTOR $name tstop $t_stop");
+		Log3($name, 4, "STELLMOTOR $name now $now");
+		Log3($name, 4, "STELLMOTOR $name Stoppe Motor");
+	}else{
+		# Start internal Timer to get the updates
 		InternalTimer($now + ($STMpollInterval), "STELLMOTOR_GetUpdate", $hash, 0);
+		Log3($name, 4, "STELLMOTOR $name starte internal timer");
+		# calc actual position/time of the motor and enter in p/t_actual
+		#Die aktuelle Position ist wie folgt zu berechnen: 
+		#$hash->{helper}{t_actual_old} = $t_actual;	
+		#$now -$laststart -> aktuelle Laufzeit
+		#readingsSingleUpdate($hash,"t_lastpos",$t_actual,0);
+		my $factor = ReadingsVal($name,'t_move', 1) > 0?1:-1;
+		my $t_actual = $hash->{helper}{savetactualduringtherun}+(($now-$t_lastStart)*$factor);
+		readingsSingleUpdate($hash,"t_actual",$t_actual,1);
+		my $p_actual = $t_actual*(AttrVal($name,"STMmaxTics",1)/AttrVal($name,"STMmaxDriveSeconds",1));
+		readingsSingleUpdate($hash,"p_actual",$p_actual,1);
+		Log3($name, 4, "STELLMOTOR $name t_actual: $t_actual");
+		Log3($name, 4, "STELLMOTOR $name now $now");
+		Log3($name, 4, "STELLMOTOR $name laststart $t_lastStart");
+		Log3($name, 4, "STELLMOTOR $name t_actual $t_actual");
+		##-> wenn man nur einen Lauf berücksichtigt.
+		### wir wollen aber ein kontinuierliches update... 
 	}
-	## i also don't understand the command_queue
-#	my $locked = ReadingsVal($name,"locked", 0);
-#	my $STMlastDiffMax = AttrVal($name, "STMlastDiffMax", 1);# is a time
-	# don't do this, just save the value
-#	if(abs($t_lastdiff)>$STMlastDiffMax){
-#	#start new drive if last diff > (attr: STMlastDiffMax)		
-#		Log3($name, 4, "STELLMOTOR $name queue_lastdiff: $t_lastdiff over STMlastDiffMax $STMlastDiffMax");
-#		STELLMOTOR_Set($hash,$name,$t_target);  
-#		}
-	#fetch missing pos.value in state after reboot
-	my $lastGuiState = ReadingsVal($name,'state', 1);
-	if(!($lastGuiState=~/^\d+$/)){
-		Log3($name, 3, "STELLMOTOR $name Stop Problem: lastGuiState:$lastGuiState please report this error L.".__LINE__);
-		##my $position = ReadingsVal($name,'position', "1");
-		readingsSingleUpdate($hash,'state',$t_target,1); #update position reading
-		##$lastGuiState=1;
-		}
-#end debug
+
 	return;
 	}
 sub STELLMOTOR_Get($@){
