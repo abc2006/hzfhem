@@ -334,6 +334,13 @@ sub STELLMOTOR_Set($@) {
 	readingsSingleUpdate($hash, "locked", 1, 1); #lock module for other commands
 	readingsSingleUpdate($hash, "t_lastStart", $now, 1); #set the actual drive starttime
 	Log3($name, 4, "STELLMOTOR $name tlaststart: $now");
+	
+	
+	## make startTime Human-Readable
+	my $timestring = strftime "%Y-%m-%d %T",localtime($now);
+	readingsSingleUpdate($hash, "t_lastStartHR", $timestring, 1); #set the end time of the move
+	
+	
 	readingsSingleUpdate($hash, "t_lastDuration", $t_move, 1); ## set the run time of the move, just informational for the User
 	Log3($name, 4, "STELLMOTOR $name tlastduration: $t_move");
 	
@@ -342,6 +349,7 @@ sub STELLMOTOR_Set($@) {
 	
 	
 	readingsSingleUpdate($hash, "t_stop", ($t_stop), 1); #set the end time of the move
+	## make StopTime Human-Readable
 	my $timestring = strftime "%Y-%m-%d %T",localtime($t_stop);
 	readingsSingleUpdate($hash, "t_stopHR", $timestring, 1); #set the end time of the move
 	$hash->{helper}{savetactualduringtherun} = $t_actual;
