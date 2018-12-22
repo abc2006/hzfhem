@@ -325,7 +325,8 @@ sub STELLMOTOR_Set($@) {
 		#$hash->{helper}{t_lastdiff} = $hash->{helper}{t_move};
 		#$hash->{helper}{t_move} = 0;
 		#readingsSingleUpdate($hash, "t_move", $hash->{helper}{t_move}, 1); 
-		readingsSingleUpdate($hash, "status", "Abbruch, differenz < STMlastDiffMax", 1); 
+		readingsSingleUpdate($hash, "status", "Abbruch, differenz < STMlastDiffMax", 1);
+		readingsSingleUpdate($hash, "locked", 0, 1); 
 		Log3 $name, 4, "STELLMOTOR $name tmove: $t_move < lastdiffmax $STMlastDiffMax";  
 		return;
 		}
@@ -696,7 +697,7 @@ sub STELLMOTOR_Attr(@) {
 			CommandDeleteAttr(undef, "$name STMpollInterval");
 		} elsif ($attrVal eq "off" || ( $attrVal >= 0.01 and $attrVal <= 600 ) ) {
 			Log3($name, 4, "STELLMOTOR $name attribute-value [$attrName] = $attrVal changed");
-			STELLMOTOR_GetUpdate($hash);
+			##STELLMOTOR_GetUpdate($hash);
 		} else {
 			RemoveInternalTimer($hash);
 			Log3($name, 3, "STELLMOTOR $name attribute-value [$attrName] = $attrVal wrong, use seconds >0.01 as float (max 600)");
