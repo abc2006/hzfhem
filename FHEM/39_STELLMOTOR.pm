@@ -1,4 +1,4 @@
-# $Id: 39_STELLMOTOR.pm 3003 2018-12-18 11:51:00Z Stephan Augustin $
+# $Id: 39_STELLMOTOR.pm 3101 2018-12-18 11:51:00Z Stephan Augustin $
 ####################################################################################################
 #
 #	39_STELLMOTOR.pm
@@ -272,8 +272,8 @@ sub STELLMOTOR_Set($@) {
 		$moveTarget = "?"; #sorge dafür, dass kein set ausgeführt wird.
 	}
 	if($moveTarget eq "stop"){
-		#STELLMOTOR_ImmediateStop($hash);
-		#Log3($name, 4, "STELLMOTOR $name User submitted Stop Request");
+		STELLMOTOR_ImmediateStop($hash);
+		Log3($name, 4, "STELLMOTOR $name User submitted Stop Request");
 		return "Feature deactivated";
 	}elsif($moveTarget eq "reset"){
 		readingsBeginUpdate($hash);
@@ -352,8 +352,17 @@ sub STELLMOTOR_Set($@) {
 	## make StopTime Human-Readable
 	my $timestring = strftime "%Y-%m-%d %T",localtime($t_stop);
 	readingsSingleUpdate($hash, "t_stopHR", $timestring, 1); #set the end time of the move
+	if($t_actual > 0 && $t_actual < $STMmaxDriveSeconds){
 	$hash->{helper}{savetactualduringtherun} = $t_actual;
+	}
+
+	if($p_actual > 0 && $p_actual < $STMmaxTics){
 	$hash->{helper}{savepactualduringtherun} = $p_actual;
+	}
+	Log3($name, 4, "STELLMOTOR $name t_saved_actual: $hash->{helper}{savetactualduringtherun}");
+	Log3($name, 4, "STELLMOTOR $name t_actual: $t_actual");
+	Log3($name, 4, "STELLMOTOR $name p_saved_actual: $hash->{helper}{savepactualduringtherun}");
+	Log3($name, 4, "STELLMOTOR $name p_actual: $p_actual");
 	STELLMOTOR_commandSend($hash,$directionRL);
 	return;
 	}
@@ -363,41 +372,54 @@ sub STELLMOTOR_Set($@) {
 sub STELLMOTOR_ImmediateStop($@){
 	my ($hash,$option) = @_;
 	my $name = $hash->{NAME};
-	my $now = gettimeofday();
+	return "no userstop permitted";	
+
 	if(ReadingsVal($name,'locked', 1)==0){
 		return; #no move in progress, nothing to stop
-		}
-	
-	my $lastGuiState = ReadingsVal($name,'state', 1);
+	}
+	my $p_target = ReadingsVal($name,'p_target', 0);
+	my $t_target = ReadingsVal($name,'t_target', 0);
+	my $t_lastdiff = ReadingsVal($name,'t_lastdiff', 0);
+	my $t_lastStart = ReadingsVal($name,'t_lastStart', 0);
+	my $t_actual = $hash->{helper}{savetactualduringtherun};
+	my $p_actual = $hash->{helper}{savepactualduringtherun};
+	my $t_move = ReadingsVal($name,"t_move", 0);
+	my $t_stop = ReadingsVal($name,"t_stop", 0);
 	my $now = gettimeofday();
+	my $STMtimeTolerance = AttrVal($name, "STMtimeTolerance", 0.001);
+	my $STMlastDiffMax = AttrVal($name, "STMlastDiffMax", 1); ## lets get lastDiffMax
 	my $STMmaxDriveSeconds = AttrVal($name, "STMmaxDriveSeconds", 107);
 	my $STMmaxTics = AttrVal($name, "STMmaxTics", 100);
+	my $STMpollInterval = AttrVal($name, "STMpollInterval", 0.1);
+	my $secPerTic = $STMmaxDriveSeconds / $STMmaxTics;  #now we have the time in seconds for 1 tic
 	my $lastGuiState = ReadingsVal($name,'state', 1);
+	Log3($name, 3, "STELLMOTOR $name ImmediateStop Problem: lastGuiState:$lastGuiState please report this error L.".__LINE__);
+	
 	if(!(ReadingsVal($name,'state', "e")=~/^\d+$/)){
-		Log3($name, 3, "STELLMOTOR $name Stop Problem: lastGuiState:$lastGuiState please report this error L.".__LINE__);
+		Log3($name, 3, "STELLMOTOR $name ImmediateStop Problem: lastGuiState:$lastGuiState please report this error L.".__LINE__);
 		readingsSingleUpdate($hash, "state", "1", 1); #debug stuff
+		$lastGuiState = 1;
+		Log3($name, 3, "STELLMOTOR $name ImmediateStop Problem: state ist jetzt 1. L.".__LINE__);
 		}
 	#get direction: +/- position=desired state=last
-	my $directionInProgress =1; #default positive 1=right
-	if(ReadingsVal($name,'state', 1)>ReadingsVal($name,'p_actual', 1)){
+	my $directionInProgress =0; #default positive 1=right
+	if($lastGuiState > $p_actual){
 		$directionInProgress=-1; #left move in progress
-	}elsif(ReadingsVal($name,'state', 1)<ReadingsVal($name,'p_actual', 1)){ #right move in progress
-		}
+	}elsif($lastGuiState < $p_actual){ #right move in progress
+		$directionInProgress =1; #default positive 1=right
+	}else{
+		return "error direction. Line:".__LINE__
+	}
 	#calc now -> tics-per-sec -> actual pos
-	my $progressedTime = $now-ReadingsVal($name,'t_lastStart', 1);
-	my $secPerTic =AttrVal($name, "STMmaxDriveSeconds", 107)/AttrVal($name, "STMmaxTics", 100);  #now we have the time in seconds for 1 tic
+	my $progressedTime = $now-$t_lastStart;
 	my $progressedTics = $progressedTime/$secPerTic;
 	$progressedTics=sprintf("%.0f",$progressedTics);
 	#new target = state + (dir 1/-1)*(already progressed tics +1) #round up/down based on direction
-	my($newTarget)=ReadingsVal($name,'state', 1)+(($progressedTics+1)*$directionInProgress);
-	#update readings: position
-	readingsBeginUpdate($hash);
-	#readingsBulkUpdate($hash, "position" , $newTarget);
+	my $newTarget = $lastGuiState+(($progressedTics+1)*$directionInProgress);
+	#update reading: position
 	#recalc and set new stopTime
-	my($newStopTime)=ReadingsVal($name,'t_lastStart', 1)+(($progressedTics+1)*$secPerTic);
-	readingsBulkUpdate($hash, "t_stop" , $newStopTime);
-	#readingsSingleUpdate($hash, "debug_19", "lastGuiState".$lastGuiState, 1); #debug stuff
-	readingsEndUpdate($hash, 1);
+	my $newStopTime = ReadingsVal($name,'t_lastStart', 1)+(($progressedTics+1)*$secPerTic);
+	#readingsSingleUpdate($hash, "t_stop" , $newStopTime);
 	#let STELLMOTOR_GetUpdate do the physical stop
 	}
 sub STELLMOTOR_Stop($@){
@@ -406,10 +428,10 @@ sub STELLMOTOR_Stop($@){
 	# send stop command to the Device
 	STELLMOTOR_commandSend($hash,"S");
 	Log3 $name, 4, "STELLMOTOR $name i bims, 1 stop";  
-	my $STMtimeTolerance = AttrVal($name, "STMtimeTolerance", 0.01);
 	my $p_target = ReadingsVal($name,'p_target', 0);
 	my $t_target = ReadingsVal($name,'t_target', 0);
 	my $t_lastdiff = ReadingsVal($name,'t_lastdiff', 0);
+	my $t_lastStart = ReadingsVal($name,'t_lastStart', 0);
 	my $t_actual = $hash->{helper}{savetactualduringtherun};
 	my $p_actual = $hash->{helper}{savepactualduringtherun};
 	my $t_move = ReadingsVal($name,"t_move", 0);
@@ -426,7 +448,11 @@ sub STELLMOTOR_Stop($@){
 	if(!($lastGuiState=~/^\d+$/)){
 		Log3($name, 3, "STELLMOTOR $name Stop Problem: lastGuiState:$lastGuiState please report this error L.".__LINE__);
 		$lastGuiState=1;
-		}
+	}elsif($lastGuiState > $STMmaxTics){
+		Log3($name, 3, "STELLMOTOR $name Stop Problem: lastGuiState:$lastGuiState too large! L.".__LINE__);
+		$lastGuiState = $lastGuiState>0?1:-1;
+	}
+
 	# calculate some values	
 	$t_lastdiff = ($t_stop-$now)*($t_target > $lastGuiState?1:-1);
 	# just because i can ... 
@@ -476,8 +502,8 @@ sub STELLMOTOR_GetUpdate($) {
 	my $now = gettimeofday();
 #	my $STMtimeTolerance = AttrVal($name, "STMtimeTolerance", 0.001);
 #	my $STMlastDiffMax = AttrVal($name, "STMlastDiffMax", 1); ## lets get lastDiffMax
-#	my $STMmaxDriveSeconds = AttrVal($name, "STMmaxDriveSeconds", 107);
-#	my $STMmaxTics = AttrVal($name, "STMmaxTics", 100);
+	my $STMmaxDriveSeconds = AttrVal($name, "STMmaxDriveSeconds", 107);
+	my $STMmaxTics = AttrVal($name, "STMmaxTics", 100);
 	my $STMpollInterval = AttrVal($name, "STMpollInterval", 0.1);
 	Log3($name, 4, "STELLMOTOR $name tstop $t_stop");
 	Log3($name, 4, "STELLMOTOR $name now $now");
@@ -499,89 +525,97 @@ sub STELLMOTOR_GetUpdate($) {
 		#$now -$laststart -> aktuelle Laufzeit
 		#readingsSingleUpdate($hash,"t_lastpos",$t_actual,0);
 		my $factor = ReadingsVal($name,'t_move', 1) > 0?1:-1;
+		Log3($name, 4, "STELLMOTOR $name factor $factor");
+		
+		if($hash->{helper}{savetactualduringtherun} < 0 || $hash->{helper}{savetactualduringtherun} > $STMmaxDriveSeconds){
+			Log3($name, 4, "STELLMOTOR $name saved_t: $hash->{helper}{savetactualduringtherun}");
+		}
 		my $t_actual = $hash->{helper}{savetactualduringtherun}+(($now-$t_lastStart)*$factor);
 		readingsSingleUpdate($hash,"t_actual",$t_actual,1);
-		my $p_actual = $t_actual*(AttrVal($name,"STMmaxTics",1)/AttrVal($name,"STMmaxDriveSeconds",1));
+		Log3($name, 4, "STELLMOTOR $name t_actual $t_actual");
+		if($hash->{helper}{savepactualduringtherun} < 0 || $hash->{helper}{savepactualduringtherun} > $STMmaxTics){
+			Log3($name, 4, "STELLMOTOR $name saved_p: $hash->{helper}{savepactualduringtherun}");
+		}
+			my $p_actual = $t_actual*(AttrVal($name,"STMmaxTics",1)/AttrVal($name,"STMmaxDriveSeconds",1));
+		Log3($name, 4, "STELLMOTOR $name p_actual $p_actual");
+
+
 		readingsSingleUpdate($hash,"p_actual",$p_actual,1);
-		Log3($name, 4, "STELLMOTOR $name t_actual: $t_actual");
 		Log3($name, 4, "STELLMOTOR $name now $now");
 		Log3($name, 4, "STELLMOTOR $name laststart $t_lastStart");
-		Log3($name, 4, "STELLMOTOR $name t_actual $t_actual");
-		##-> wenn man nur einen Lauf berücksichtigt.
-		### wir wollen aber ein kontinuierliches update... 
 	}
 
 	return;
 	}
 sub STELLMOTOR_Get($@){
-##	my ($hash, @a) = @_;
-#	my $name = $hash->{NAME};
-#	my $get = $a[1];
-#	# Warum werden denn Readings geholt? 
-#	my @stmgets = (keys(%{$hash->{READINGS}}));
-#	$get="?" if(!_stm_in_array($get,(@stmgets,"attrHelp","readingsHelp","stmWwiki")));
-#	my $usage = "Unknown argument $get, choose one of";
-#	foreach(@stmgets){
-#		$usage.=" ".$_.":noArg";
-#		}
-#	$usage.=" attrHelp:";
-#	my($first)=0;
-#	foreach(_stmAttribs("keys","")){
-#		if($first){
-#			$usage.=$_;
-#			$first=0;
-#		}else{
-#			$usage.=",".$_;
-#			}
-#		}
-#	$usage.=" readingsHelp:";
-#	foreach(_stmRdings("keys","")){
-#		$usage.=$_.",";
-#		}
-#	$usage.=" stmWwiki:get,set,readings,attr";
-#	#check what has been requested?
-#	if($get eq "attrHelp"){return _stmAttribs("help",$a[2]);}
-#	if($get eq "readingsHelp"){return _stmRdings("help",$a[2]);}
-#	if($get eq "stmWwiki"){
-#		my $bereich = $a[2];
-#		#bereich "get" "set" "readings" "attr"
-#		my $wret;
-#		if($bereich eq "get"){
-#			$wret=STELLMOTOR_Get($hash,$name,"?");
-#			$wret=~s/Unknown argument \?, choose one of//g;
-#			$wret=~s/\s+/\n* /g;
-# 			$wret=~s/:noArg//g;
-#			$wret=~s/:/: /g;
-#			return "extracted usage of get command:\n\n".$wret
-#		}elsif($bereich eq "set"){
-#			##$wret=STELLMOTOR_Set($hash,$name,"?");
-#			$wret=~s/Unknown argument \?, choose one of//g;
-#			$wret=~s/\s+/\n* /g;
-#			$wret=~s/:noArg//g;
-#			$wret=~s/:/: /g;
-#			return "extracted usage of set command:\n\n".$wret;
-#		}elsif($bereich eq "readings"){
-#			$wret="\n== Readings ==\nAlle Readings sind auch in fhem durch das kommando get readingsHelp <varname> erklärt, für's \"".
-#			"schnelle nachschauen zwischendurch\".\n\n{| class=\"wikitable sortable\"\n|-\n! Reading !! (Typ) Default !! Beschreibung\n|-\n";
-#			foreach(_stmRdings("keys","")){
-#				$wret.="| ".	$_."|| ("._stmRdings("type",$_).") "._stmRdings("default",$_)." || "._stmRdings("description",$_)."\n|-\n";
-#				}
-#			$wret.="\n|}\n\n";
-#		}elsif($bereich eq "attr"){
-#			$wret="\n== Attributes ==\nAlle Attributes sind auch in fhem durch das kommando get attrHelp <varname> erklärt, für's \"".
-#			"schnelle nachschauen zwischendurch\".\n\n{| class=\"wikitable sortable\"\n|-\n! Attribute !! (Typ) Default !! Beschreibung\n|-\n";
-#			foreach(_stmAttribs("keys","")){
-#				$wret.="| ".	$_."|| ("._stmAttribs("type",$_).") "._stmAttribs("default",$_)." || "._stmAttribs("description",$_)."\n|-\n";
-#				}
-#			$wret.="\n|}\n\n";
-#		}else{
-#			return "get Error in Line ".__LINE__;
-#			}
-#		return $wret;
-#		}
-#	return $usage if $get eq "?";
-#	my $ret = $get.": ".ReadingsVal($name,$get, "Unknown");
-#	return $ret;
+	my ($hash, @a) = @_;
+	my $name = $hash->{NAME};
+	my $get = $a[1];
+	# Warum werden denn Readings geholt? 
+	my @stmgets = (keys(%{$hash->{READINGS}}));
+	$get="?" if(!_stm_in_array($get,(@stmgets,"attrHelp","readingsHelp","stmWwiki")));
+	my $usage = "Unknown argument $get, choose one of";
+	foreach(@stmgets){
+		$usage.=" ".$_.":noArg";
+		}
+	$usage.=" attrHelp:";
+	my($first)=0;
+	foreach(_stmAttribs("keys","")){
+		if($first){
+			$usage.=$_;
+			$first=0;
+		}else{
+			$usage.=",".$_;
+			}
+		}
+	$usage.=" readingsHelp:";
+	foreach(_stmRdings("keys","")){
+		$usage.=$_.",";
+		}
+	$usage.=" stmWwiki:get,set,readings,attr";
+	#check what has been requested?
+	if($get eq "attrHelp"){return _stmAttribs("help",$a[2]);}
+	if($get eq "readingsHelp"){return _stmRdings("help",$a[2]);}
+	if($get eq "stmWwiki"){
+		my $bereich = $a[2];
+		#bereich "get" "set" "readings" "attr"
+		my $wret;
+		if($bereich eq "get"){
+			$wret=STELLMOTOR_Get($hash,$name,"?");
+			$wret=~s/Unknown argument \?, choose one of//g;
+			$wret=~s/\s+/\n* /g;
+ 			$wret=~s/:noArg//g;
+			$wret=~s/:/: /g;
+			return "extracted usage of get command:\n\n".$wret
+		}elsif($bereich eq "set"){
+			##$wret=STELLMOTOR_Set($hash,$name,"?");
+			$wret=~s/Unknown argument \?, choose one of//g;
+			$wret=~s/\s+/\n* /g;
+			$wret=~s/:noArg//g;
+			$wret=~s/:/: /g;
+			return "extracted usage of set command:\n\n".$wret;
+		}elsif($bereich eq "readings"){
+			$wret="\n== Readings ==\nAlle Readings sind auch in fhem durch das kommando get readingsHelp <varname> erklärt, für's \"".
+			"schnelle nachschauen zwischendurch\".\n\n{| class=\"wikitable sortable\"\n|-\n! Reading !! (Typ) Default !! Beschreibung\n|-\n";
+			foreach(_stmRdings("keys","")){
+				$wret.="| ".	$_."|| ("._stmRdings("type",$_).") "._stmRdings("default",$_)." || "._stmRdings("description",$_)."\n|-\n";
+				}
+			$wret.="\n|}\n\n";
+		}elsif($bereich eq "attr"){
+			$wret="\n== Attributes ==\nAlle Attributes sind auch in fhem durch das kommando get attrHelp <varname> erklärt, für's \"".
+			"schnelle nachschauen zwischendurch\".\n\n{| class=\"wikitable sortable\"\n|-\n! Attribute !! (Typ) Default !! Beschreibung\n|-\n";
+			foreach(_stmAttribs("keys","")){
+				$wret.="| ".	$_."|| ("._stmAttribs("type",$_).") "._stmAttribs("default",$_)." || "._stmAttribs("description",$_)."\n|-\n";
+				}
+			$wret.="\n|}\n\n";
+		}else{
+			return "get Error in Line ".__LINE__;
+			}
+		return $wret;
+		}
+	return $usage if $get eq "?";
+	my $ret = $get.": ".ReadingsVal($name,$get, "Unknown");
+	return $ret;
 	}
 sub STELLMOTOR_Notify(@) {
   my ($hash, $dev) = @_;
@@ -624,6 +658,7 @@ sub STELLMOTOR_Calibrate($@){
 #drive to left (or right if attr) for maximum time and call "set reset"
 	my ($hash,$option) = @_;
 	my $name = $hash->{NAME};
+	return "function calibrate deactivated";
 	my $STMmaxDriveSeconds = AttrVal($name, "STMmaxDriveSeconds", 107);
 	my $STMmaxTics = ReadingsVal($name,'STMmaxTics', "100");
 	
