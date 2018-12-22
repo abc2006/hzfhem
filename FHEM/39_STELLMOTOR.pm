@@ -264,6 +264,8 @@ sub STELLMOTOR_Set($@) {
 	my $STMlastDiffMax = AttrVal($name, "STMlastDiffMax", 1); ## lets get lastDiffMax
 	my $STMmaxDriveSeconds = AttrVal($name, "STMmaxDriveSeconds", 107);
 	my $STMmaxTics = AttrVal($name, "STMmaxTics", 100);
+	my $locked = ReadingsVal($name,'locked',0);
+	
 	
 	Log3 $name, 4, "STELLMOTOR $name moveTarget $moveTarget";  
 	if (IsDisabled($name)) {
@@ -287,6 +289,10 @@ sub STELLMOTOR_Set($@) {
 		return;
 	}elsif($moveTarget eq "position"){
 		if(length($args[2]) && $args[2] =~ /^\d+$/ && $args[2] >= 0 && $args[2] <= $STMmaxTics){
+			if($locked){
+			#device is locked, do nothing
+			return "Device is locked, try again later. Your command is discarded."
+			}
 			$p_target = $args[2];	## just save the target Position
 			readingsSingleUpdate($hash, "p_target", $p_target, 1);
 			$t_target = $args[2]*$STMmaxDriveSeconds/$STMmaxTics; ## here we have the wanted position in seconds
@@ -300,7 +306,6 @@ sub STELLMOTOR_Set($@) {
 		Log3 $name, 4, "STELLMOTOR $name Irgendein anderer dämlicher Fehler ist aufgetreten. Line:". __LINE__;  
 		return;
 		}
-	my $locked = ReadingsVal($name,'locked',0);
 	if ($locked) {
 		Log3 $name, 4, "STELLMOTOR $name Device is locked";  
 		return;
