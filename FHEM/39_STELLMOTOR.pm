@@ -521,8 +521,6 @@ sub STELLMOTOR_GetUpdate($) {
 		Log3($name, 4, "STELLMOTOR $name Stoppe Motor");
 	}else{
 		# Start internal Timer to get the updates
-		InternalTimer($now + ($STMpollInterval), "STELLMOTOR_GetUpdate", $hash, 0);
-		Log3($name, 4, "STELLMOTOR $name starte internal timer");
 		# calc actual position/time of the motor and enter in p/t_actual
 		#Die aktuelle Position ist wie folgt zu berechnen: 
 		#$hash->{helper}{t_actual_old} = $t_actual;	
@@ -530,27 +528,52 @@ sub STELLMOTOR_GetUpdate($) {
 		#readingsSingleUpdate($hash,"t_lastpos",$t_actual,0);
 		my $factor = ReadingsVal($name,'t_move', 1) >= 0?1:-1;
 		Log3($name, 4, "STELLMOTOR $name factor $factor");
-		
-		if(length($t_saved) || $t_saved < 0 || $t_saved > $STMmaxDriveSeconds){
-			Log3($name, 4, "STELLMOTOR $name saved_t: $t_saved");
+		####################
+		Log3($name, 4, "STELLMOTOR $name saved_t_before: $t_saved");
+		if(!length($t_saved) || $t_saved < 0 || $t_saved > $STMmaxDriveSeconds || $t_saved eq ""){
+			Log3($name, 4, "STELLMOTOR $name value missing or wrong saved_t: $t_saved");
+			$hash->{helper}{savetactualduringtherun} = $STMmaxDriveSeconds;
 			return "value t_saved:_".$t_saved."_ is missing or wrong";
 		}
 		my $t_actual = $t_saved+(($now-$t_lastStart)*$factor);
-		Log3($name, 4, "STELLMOTOR $name saved_t: $t_saved");
+		Log3($name, 4, "STELLMOTOR $name saved_t_after: $t_saved");
 		readingsSingleUpdate($hash,"t_actual",$t_actual,1);
 		Log3($name, 4, "STELLMOTOR $name t_actual $t_actual");
-		if(length($p_saved) || $p_saved < 0 || $p_saved > $STMmaxTics){
-			Log3($name, 4, "STELLMOTOR $name saved_p: $p_saved");
+
+		###################
+		Log3($name, 4, "STELLMOTOR $name saved_p_before: $p_saved");
+		if(!length($p_saved) || $p_saved < 0 || $p_saved > $STMmaxTics || $p_saved eq ""){
+			Log3($name, 4, "STELLMOTOR $name value missing or wrong saved_p: $p_saved");
+			$hash->{helper}{savepactualduringtherun} = $STMmaxTics;
 			return "value p_saved:_".$p_saved."_ is missing or wrong";
 		}
 		my $p_actual = $t_actual*(AttrVal($name,"STMmaxTics",1)/AttrVal($name,"STMmaxDriveSeconds",1));
-		Log3($name, 4, "STELLMOTOR $name saved_p: $hash->{helper}{savepactualduringtherun}");
+		Log3($name, 4, "STELLMOTOR $name saved_p_after: $p_saved");
 		readingsSingleUpdate($hash,"p_actual",$p_actual,1);
 		Log3($name, 4, "STELLMOTOR $name p_actual $p_actual");
-
+		###############
+		Log3($name, 4, "STELLMOTOR $name t_stop_before: $t_stop");
+		if(!length($t_stop) || $t_stop < 0 || $t_stop > $now+$STMmaxDriveSeconds || $t_stop eq ""){
+			Log3($name, 4, "STELLMOTOR $name value missing or wrong t_stop: $t_stop");
+			#$t_stop = $now;
+			readingsSingleUpdate($hash,"t_stop",$now,1);
+			readingsSingleUpdate($hash,"t_stopHR","stop-error",1);
+			# no need to return as this is the fastest way to stop the Motor
+			#return "value p_saved:_".$p_saved."_ is missing or wrong";
+		}
+		my $p_actual = $t_actual*(AttrVal($name,"STMmaxTics",1)/AttrVal($name,"STMmaxDriveSeconds",1));
+		Log3($name, 4, "STELLMOTOR $name saved_p_after: $p_saved");
+		readingsSingleUpdate($hash,"p_actual",$p_actual,1);
+		Log3($name, 4, "STELLMOTOR $name p_actual $p_actual");
+		###############
 
 		Log3($name, 4, "STELLMOTOR $name now $now");
 		Log3($name, 4, "STELLMOTOR $name laststart $t_lastStart");
+		
+		
+		# at least, start a timer
+		InternalTimer($now + ($STMpollInterval), "STELLMOTOR_GetUpdate", $hash, 0);
+		Log3($name, 4, "STELLMOTOR $name starte internal timer");
 	}
 
 	return;
