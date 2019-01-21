@@ -533,27 +533,46 @@ sub STELLMOTOR_GetUpdate($) {
 		####################
 		#t_saved
 		Log3($name, 4, "STELLMOTOR $name saved_t_before: $t_saved");
-		if(!length($t_saved) || $t_saved < 0 || $t_saved > $STMmaxDriveSeconds || $t_saved eq ""){
-			Log3($name, 4, "STELLMOTOR $name value missing or wrong saved_t: $t_saved");
+		if($t_saved > $STMmaxDriveSeconds){
+			Log3($name, 4, "STELLMOTOR $name value wrong saved_t: $t_saved");
 			$hash->{helper}{savetactualduringtherun} = $STMmaxDriveSeconds;
 			readingsSingleUpdate($hash,"status","t_saved out of range. resettet. need_calibration",1);
+			Log3($name, 4, "value t_saved:_".$t_saved."_ is missing or wrong");
+				STELLMOTOR_Stop($hash);
+				Log3($name, 4, "STELLMOTOR $name tstop < now");
+				Log3($name, 4, "STELLMOTOR $name tstop $t_stop");
+				Log3($name, 4, "STELLMOTOR $name now $now");
+				Log3($name, 4, "STELLMOTOR $name Stoppe Motor");
+		}
+		if(!length($t_saved) || $t_saved < 0 || $t_saved eq ""){
+			Log3($name, 4, "STELLMOTOR $name value missing or wrong saved_t: $t_saved");
+			$hash->{helper}{savetactualduringtherun} = 0;
+			readingsSingleUpdate($hash,"status","t_saved out of range. resettet. stopped need_calibration",1);
 			Log3($name, 4, "value t_saved:_".$t_saved."_ is missing or wrong");
 		}
 		Log3($name, 4, "STELLMOTOR $name saved_t_after: $t_saved");
 		#...............................................................................
 		# t_actual
 		Log3($name, 4, "STELLMOTOR $name actual_t_before: $t_actual");
-		if(!length($t_actual) || $t_actual < 0 || $t_actual > $STMmaxDriveSeconds || $t_actual eq ""){
+		my $t_actual = $t_saved+(($now-$t_lastStart)*$factor);
+		
+		if($t_actual > $STMmaxDriveSeconds){
 			Log3($name, 4, "STELLMOTOR $name value missing or wrong t_actual: $t_actual");
 			$t_actual = $STMmaxDriveSeconds;
+			readingsSingleUpdate($hash,"status","t_saved out of range. resettet. need_calibration",1);
+			Log3($name, 4, "value t_actual:_".$t_actual."_ is missing or wrong");
+				STELLMOTOR_Stop($hash);
+				Log3($name, 4, "STELLMOTOR $name tstop < now");
+				Log3($name, 4, "STELLMOTOR $name tstop $t_stop");
+				Log3($name, 4, "STELLMOTOR $name now $now");
+				Log3($name, 4, "STELLMOTOR $name Stoppe Motor");
+			Log3($name, 4, "value t_actual:_".$t_actual."_ is missing or wrong");
+		}	
+		if(!length($t_actual) || $t_actual < 0 || $t_actual eq ""){
+			Log3($name, 4, "STELLMOTOR $name value missing or wrong t_actual: $t_actual");
+			$t_actual = 0;
 			readingsSingleUpdate($hash,"status","t_actual out of range. resettet. need_calibration",1);
 			Log3($name, 4, "value t_actual:_".$t_actual."_ is missing or wrong");
-		}
-		my $t_actual = $t_saved+(($now-$t_lastStart)*$factor);
-		if($t_actual < 0){
-			Log3($name, 4, "STELLMOTOR $name actual_t < 0; set to 0: $t_actual");
-			$t_actual = 0;
-			STELLMOTOR_Stop($hash);
 		}
 		Log3($name, 4, "STELLMOTOR $name readingsUpdate actual_t_recalc: $t_actual");
 		#_______________________________________________________
@@ -561,23 +580,23 @@ sub STELLMOTOR_GetUpdate($) {
 
 		###################
 		#p_saved
-		Log3($name, 4, "STELLMOTOR $name saved_p_before: $p_saved");
-		if(!length($p_saved) || $p_saved < 0 || $p_saved > $STMmaxTics || $p_saved eq ""){
-			Log3($name, 4, "STELLMOTOR $name value missing or wrong saved_p: $p_saved");
-			$hash->{helper}{savepactualduringtherun} = $STMmaxTics;
-			readingsSingleUpdate($hash,"status","p_saved out of range. resettet. need_calibration",1);
-			Log3($name, 4, "value p_saved:_".$p_saved."_ is missing or wrong");
-		}
-		Log3($name, 4, "STELLMOTOR $name saved_p_after: $p_saved");
+		##Log3($name, 4, "STELLMOTOR $name saved_p_before: $p_saved");
+		##if(!length($p_saved) || $p_saved < 0 || $p_saved > $STMmaxTics || $p_saved eq ""){
+			##Log3($name, 4, "STELLMOTOR $name value missing or wrong saved_p: $p_saved");
+			##$hash->{helper}{savepactualduringtherun} = $STMmaxTics;
+			##	readingsSingleUpdate($hash,"status","p_saved out of range. resettet. need_calibration",1);
+			##	Log3($name, 4, "value p_saved:_".$p_saved."_ is missing or wrong");
+			##}
+		##Log3($name, 4, "STELLMOTOR $name saved_p_after: $p_saved");
 		#...............................................................................
 		#p_actual
-		Log3($name, 4, "STELLMOTOR $name actual_p_before: $p_actual");
-		if(!length($p_actual) || $p_actual < 0 || $p_actual > $STMmaxTics || $p_actual eq ""){
-			Log3($name, 4, "STELLMOTOR $name value missing or wrong p_actual: $p_actual");
-			$p_actual = $STMmaxTics;
-			readingsSingleUpdate($hash,"status","p_actual out of range. resettet. need_calibration",1);
-			Log3($name, 4, "value p_actual:_".$p_actual."_ is missing or wrong");
-		}
+		##Log3($name, 4, "STELLMOTOR $name actual_p_before: $p_actual");
+		##if(!length($p_actual) || $p_actual < 0 || $p_actual > $STMmaxTics || $p_actual eq ""){
+			##Log3($name, 4, "STELLMOTOR $name value missing or wrong p_actual: $p_actual");
+			##$p_actual = $STMmaxTics;
+			##readingsSingleUpdate($hash,"status","p_actual out of range. resettet. need_calibration",1);
+			##Log3($name, 4, "value p_actual:_".$p_actual."_ is missing or wrong");
+			##}
 		my $p_actual = $t_actual*(AttrVal($name,"STMmaxTics",1)/AttrVal($name,"STMmaxDriveSeconds",1));
 		# no need to check for values smaller then 0 because its already done above
 		Log3($name, 4, "STELLMOTOR $name readingsUpdate actual_p: $p_actual");
