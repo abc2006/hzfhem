@@ -1,5 +1,5 @@
-# $Id: 39_STELLMOTOR.pm 3101 2018-12-18 11:51:00Z Stephan Augustin $
 ####################################################################################################
+# $Id: 39_STELLMOTOR.pm 3102 2019-03-10 11:51:00Z StephanAugustin $
 #
 #	39_STELLMOTOR.pm
 #
@@ -296,11 +296,27 @@ sub STELLMOTOR_Set($@) {
 				readingsSingleUpdate($hash, "status", "order accepted", 1); 
 				readingsSingleUpdate($hash, "locked", 1, 1); 
 			}
+			if($args[2] > $STMmaxTics-1){
+				readingsSingleUpdate($hash, "p_target", $STMmaxTics, 1);
+				readingsSingleUpdate($hash, "t_target", $STMmaxDriveSeconds, 1);
+				STELLMOTOR_commandSend($hash,"R");
+				Log3($name, 0, "STELLMOTOR $name calibrating to $STMmaxTics");
+				return "calibrating to $STMmaxTics";
+
+			}elsif($args[2] < 1){
+				STELLMOTOR_commandSend($hash,"L");
+				readingsSingleUpdate($hash, "p_target", 0, 1);
+				readingsSingleUpdate($hash, "t_target", 0, 1);
+				Log3($name, 0, "STELLMOTOR $name calibrating to 0");
+				return "calibrating to 0";
+
+			}else{
 			$p_target = $args[2];	## just save the target Position
 			readingsSingleUpdate($hash, "p_target", $p_target, 1);
 			$t_target = $args[2]*$STMmaxDriveSeconds/$STMmaxTics; ## here we have the wanted position in seconds
 			readingsSingleUpdate($hash, "t_target", $t_target, 1);
 			readingsSingleUpdate($hash, "t_pertic", $STMmaxDriveSeconds/$STMmaxTics, 1);
+			}
 		}else {
 			return "Value must be between 0 and \$STMmaxTics ($STMmaxTics)";
 		}
