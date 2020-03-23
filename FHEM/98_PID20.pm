@@ -59,6 +59,8 @@
 #               Fix:     adjust commandref 
 # V 1.0.0.9     Feature: new attribute pidIPortionCallBeforeSetting for user specific callback 
 #               before setting a new value to p-portion
+# V 1.0.0.10    Enhancement: enhanced Debugging in relation to i-Portion (abc2006)
+# V 1.0.0.11	Enhancement: PID is working also with actor device "none" (makes it possible to catch the value without additional Event by doif or FHEM2FHEM)
 ####################################################################################################
 package main;
 
@@ -70,7 +72,7 @@ use vars qw($readingFnAttributes);
 use vars qw(%attr);
 use vars qw(%modules);
 
-my $PID20_Version = "1.0.0.9";
+my $PID20_Version = "1.0.0.11";
 sub PID20_Calc($);
 ########################################
 sub PID20_Log($$$)
@@ -192,7 +194,7 @@ sub PID20_Define($$$)
 
   # Actor
   my ( $actor, $cmd ) = split( ":", $a[3], 2 );
-  if ( !$defs{$actor} )
+  if ( !$defs{$actor} && $actor ne "none")
   {
     my $msg = "$name: Unknown actor device $actor specified";
     PID20_Log $hash, 1, $msg;
@@ -267,7 +269,7 @@ sub PID20_Notify($$)
       . sprintf( "%.2f", $deltaDiff ) . "]"
       if ($DEBUG);
 
-    # ----- build difference of timestamps (ok)
+    # ----- build difference of timestamps (ok) in seconds
     my $deltaOldTsStr = $hash->{helper}{deltaOldTS};
     my $deltaOldTsNum = time_str2num($deltaOldTsStr) if ( defined($deltaOldTsStr) );
     my $nowTsNum      = gettimeofday();
@@ -275,11 +277,11 @@ sub PID20_Notify($$)
       if ( defined($deltaOldTsNum) && ( ( $nowTsNum - $deltaOldTsNum ) > 0 ) );
     PID20_Log $hash, 5, "tsDiff: tsDiff = $tsDiff " if ($DEBUG);
 
-    # ----- calculate gradient of delta
+    # ----- calculate gradient of delta [ differenz pro sekunde]
     my $deltaGradient = $deltaDiff / $tsDiff
       if ( defined($deltaDiff) && defined($tsDiff) && ( $tsDiff > 0 ) );
-    $deltaGradient = 0 if ( !defined($deltaGradient) );
-    my $sdeltaDiff     = ($deltaDiff)     ? sprintf( "%.2f", $deltaDiff )     : '';
+    $deltaGradient = 0 if ( !defined($deltaGradient) );## im Zweifel 0
+    my $sdeltaDiff     = ($deltaDiff)     ? sprintf( "%.2f", $deltaDiff )     : ''; # wenn es deltaDiff gibt, formatieren auf zwei Nachkommastellen, sonst ''
     my $sTSDiff        = ($tsDiff)        ? sprintf( "%.2f", $tsDiff )        : '';
     my $sDeltaGradient = ($deltaGradient) ? sprintf( "%.6f", $deltaGradient ) : '';
     PID20_Log $hash, 5,
@@ -329,7 +331,7 @@ sub PID20_Set($@)
   my $name    = $hash->{NAME};
   my $reFloat = '^([\\+,\\-]?\\d+\\.?\d*$)';
   my $usage =
-    "Unknown argument $a[1], choose one of stop:noArg start:noArg restart "
+    "Unknown argument $a[1], choose one of stop:noArg start:noArg restart reset:noArg "
     . AttrVal( $name, 'pidDesiredName', 'desired' );
   return $usage if ( @a < 2 );
   my $cmd = lc( $a[1] );
@@ -381,6 +383,18 @@ sub PID20_Set($@)
       $hash->{helper}{adjust}  = $value;
       PID20_RestartTimer($hash,1);
       PID20_Log $hash, 3, "set $name $cmd $value";
+    }
+    when ("reset")
+    { ## reset all calculations and start fresh
+    $hash->{helper}{deltaGradient} = 0; 
+    $hash->{helper}{deltaOld}      = 0;
+    $hash->{helper}{deltaOldTS}    = 0;
+    #pid. pi und pp
+    readingsSingleUpdate($hash, "p_i", 0, 1);
+    readingsSingleUpdate($hash, "p_d", 0, 1);
+    readingsSingleUpdate($hash, "p_p", 0, 1);
+    readingsSingleUpdate($hash, "actuationCalc", 0, 1);
+    readingsSingleUpdate($hash, "actuation", 0, 1);
     }
     when ("calc")    # inofficial function, only for debugging purposes
     {
@@ -438,7 +452,7 @@ sub PID20_Calc($)
   my $iPortion = ReadingsVal( $name, 'p_i',   0 );
   my $pPortion = ReadingsVal( $name, 'p_p',   '' );
   my $dPortion = ReadingsVal( $name, 'p_d',   '' );
-  my $stateStr = '';
+  my $stateStr = ( $hash->{helper}{statestr} ) ? $hash->{helper}{statestr} : '';
   my $deltaOld = ReadingsVal( $name, 'delta', 0 );
   my $delta    = '';
   my $deltaGradient    = ( $hash->{helper}{deltaGradient} ) ? $hash->{helper}{deltaGradient} : 0;
@@ -471,7 +485,13 @@ sub PID20_Calc($)
     $hash->{helper}{factor_P} = ( AttrVal( $name, 'pidFactor_P', 25 ) =~ m/$reFloatpos/ )   ? $1 : 25;
     $hash->{helper}{factor_I} = ( AttrVal( $name, 'pidFactor_I', 0.25 ) =~ m/$reFloatpos/ ) ? $1 : 0.25;
     $hash->{helper}{factor_D} = ( AttrVal( $name, 'pidFactor_D', 0 ) =~ m/$reFloatpos/ )    ? $1 : 0;
-
+    PID20_Log $hash, 2, 
+   	'factor_P: ' . $hash->{helper}{factor_P} .
+    	'factor_I: ' .  $hash->{helper}{factor_I} . 
+       	'factor_D: ' . $hash->{helper}{factor_D}
+	if ($DEBUG_Calc);
+                  
+    
     if ( $hash->{helper}{disable} )
     {
       $stateStr = 'disabled';
@@ -552,11 +572,12 @@ sub PID20_Calc($)
         $iPortion = $actorLimitLower if ( $iPortion < $actorLimitLower );
         PID20_Log $hash, 5, "adjust request with:" . $hash->{helper}{adjust} . " ==> p_i:$iPortion";
         $hash->{helper}{adjust} = '';
-      } elsif ( !$isWindup )    # integrate only if no windUp
+      } elsif ( !$isWindup )    # integrate only if no windUp and if 'adjust' empty
       {
         # normalize the intervall to minute=60 seconds
         $iPortion = $iPortion + $workDelta * $hash->{helper}{factor_I} * $hash->{helper}{calcInterval} / 60;
-        $hash->{helper}{isWindUP} = 0;
+    	PID20_Log $hash, 2, 'factor_I: ' .  $hash->{helper}{factor_I} if ($DEBUG_Calc);
+	$hash->{helper}{isWindUP} = 0;
       }
 
       $hash->{helper}{isWindUP} = $isWindup;
@@ -691,22 +712,27 @@ sub PID20_Calc($)
         use strict "refs";
         PID20_Log $hash, 5, 'return value of ' . $actorCallBeforeSetting . ':' . $actuation;
       }
+	if ($hash->{helper}{actor} ne "none"){
+      		#build command for fhem
+      		PID20_Log $hash, 5, 'actor:' . $hash->{helper}{actor} . ' actorCommand:' . $hash->{helper}{actorCommand}
+      		  . ' actuation:' . $actuation;
+      		my $cmd = sprintf( "set %s %s %g", $hash->{helper}{actor}, $hash->{helper}{actorCommand}, $actuation );
 
-      #build command for fhem
-      PID20_Log $hash, 5, 'actor:' . $hash->{helper}{actor} . ' actorCommand:' . $hash->{helper}{actorCommand}
-        . ' actuation:' . $actuation;
-      my $cmd = sprintf( "set %s %s %g", $hash->{helper}{actor}, $hash->{helper}{actorCommand}, $actuation );
+      		# execute command
+      		my $ret;
+      		$ret = fhem $cmd;
 
-      # execute command
-      my $ret;
-      $ret = fhem $cmd;
-
-      # note timestamp
-      $hash->{helper}{actorTimestamp} = TimeNow();
-      $actuationDone = $actuation;
-      my $retStr = '';
-      $retStr = ' with return-value:' . $ret if ( defined($ret) && ( $ret ne '' ) );
-      PID20_Log $hash, 3, "<$cmd> " . $retStr;
+      		# note timestamp
+      		$hash->{helper}{actorTimestamp} = TimeNow();
+      		$actuationDone = $actuation;
+      		my $retStr = '';
+      		$retStr = ' with return-value:' . $ret if ( defined($ret) && ( $ret ne '' ) );
+      		PID20_Log $hash, 3, "<$cmd> " . $retStr;
+	} else {
+	
+      		$hash->{helper}{actorTimestamp} = TimeNow();
+      		$actuationDone = $actuation;
+	}
     }
     my $updateAlive = ( $actuation ne '' )
       && PID20_TimeDiff( ReadingsTimestamp( $name, 'actuation', gettimeofday() ) ) >= $hash->{helper}{updateInterval};
