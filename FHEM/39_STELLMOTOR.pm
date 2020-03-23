@@ -34,6 +34,7 @@
 # V3006 Added reading fir last runtime
 # V3007 STMlastdiffmax is now available as float. no safety checks performed!
 # V3008 STMmaxTics is now expanded to 360, as there are some motors turning up to 355 degrees
+# V3009	test
 ####################################################################################################
 
 package main;
