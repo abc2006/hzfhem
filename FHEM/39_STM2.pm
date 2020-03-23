@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # $Id: 39_STELLMOTOR.pm 3002 2014-10-03 11:51:00Z Florian Duesterwald $
 ####################################################################################################
 #
@@ -14,46 +13,45 @@ use strict;
 use warnings;
 use Time::HiRes qw(gettimeofday); 
 
-sub STELLMOTOR_Define($$);
-sub STELLMOTOR_Undefine($$);
-sub STELLMOTOR_Set($@);
-sub STELLMOTOR_Get($@);
-sub STELLMOTOR_Notify(@);
-sub STELLMOTOR_Attr(@);
-sub STELLMOTOR_Calibrate($@);
-#}
+sub STM2_Define($$);
+sub STM2_Undefine($$);
+sub STM2_Set($@);
+sub STM2_Get($@);
+sub STM2_Notify(@);
+sub STM2_Attr(@);
+sub STM2_Calibrate($@);
 
-sub STELLMOTOR_commandSend($$){
+sub STM2_commandSend($$){
 	#params: R | L | S
 	my ($hash, $cmd)	= @_;
 	my $name = $hash->{NAME};
-	if($command eq "R"){ 
+	if($cmd eq "R"){ 
 		CommandSet(undef,AttrVal($name,"STMdevL",0)." off");
 		CommandSet(undef,AttrVal($name,"STMdevR",0)." on");
 		}
-	if($command eq "L"){ 
+	if($cmd eq "L"){ 
 		CommandSet(undef,AttrVal($name,"STMdevR",0)." off");
 		CommandSet(undef,AttrVal($name,"STMdevL",0)." on");
 		}
-	if($command eq "S"){ #rl first on move, rl last on stop
+	if($cmd eq "S"){ 
 		CommandSet(undef,AttrVal($name,"STMdevR",0)." off");
 		CommandSet(undef,AttrVal($name,"STMdevL",0)." off");
 		}
 	return;
 	}
 
-sub STELLMOTOR_Initialize($){
+sub STM2_Initialize($){
 	my ($hash) = @_;
-	$hash->{DefFn}		= "STELLMOTOR_Define";
-	$hash->{UndefFn}	= "STELLMOTOR_Undefine";
-	$hash->{SetFn}		= "STELLMOTOR_Set";
-	$hash->{GetFn}		= "STELLMOTOR_Get";
-	$hash->{NotifyFn}	= "STELLMOTOR_Notify";
-	$hash->{AttrFn}		= "STELLMOTOR_Attr";
-	$hash->{AttrList}	= "disable:0,1 STMmaxTics STMmaxDriveSeconds STMdevL STMdevR STMlastDiffMax STMpollInterval ".$readingFnAttributes;
+	$hash->{DefFn}		= "STM2_Define";
+	$hash->{UndefFn}	= "STM2_Undefine";
+	$hash->{SetFn}		= "STM2_Set";
+	$hash->{GetFn}		= "STM2_Get";
+	$hash->{NotifyFn}	= "STM2_Notify";
+	$hash->{AttrFn}		= "STM2_Attr";
+	$hash->{AttrList}	= "disable:0,1 STMmaxDriveSeconds STMdevL STMdevR STMlastDiffMax STMpollInterval ".$readingFnAttributes;
 }
 
-sub STELLMOTOR_Define($$){
+sub STM2_Define($$){
 	my ($hash, $def) = @_;
 	my @args = split("[ \t]+", $def);
 	my $menge = int(@args);
@@ -65,90 +63,90 @@ sub STELLMOTOR_Define($$){
 	
 	Log3($name, 3, "STELLMOTOR $name active, type=".$args[2]);
 		readingsSingleUpdate($hash, "state", "initialized",1);
-	my $position = ReadingsVal($name,"position", "0");
-		readingsSingleUpdate($hash, "state", $position,1);
-	if(AttrVal($name,"STMdevR","") ne "" && AttrVal($name,"STMdevL","") ne "" && AttrVal($name,"STMmaxTics","") ne "" && AttrVal($name,"STMmaxDriveSeconds","") ne "")
-	{
-		InternalTimer(gettimeofday() + 120, "STELLMOTOR_GetUpdate", $hash, 0);
-	} else  {
-		return "missing Attributes";
-	}
+		## braucht man das hier ? 
+##	InternalTimer(gettimeofday() + 120, "STM2_GetUpdate", $hash, 0);
 return;
 }
-sub STELLMOTOR_Undefine($$){
+sub STM2_Undefine($$){
   my($hash, $name) = @_;
   RemoveInternalTimer($hash);
   return;
 }
 
-sub STELLMOTOR_Set($@) {
-	my ($hash, @args)	= @_;
+sub STM2_Set($@) {
+	my ($hash, @args) = @_;
 	my $name = $hash->{NAME};
 	my $setOption = $args[1];
 	my $now = gettimeofday();
 	my $STMmaxDriveSeconds = AttrVal($name, "STMmaxDriveSeconds", 107);
-	my $STMmaxTics = AttrVal($name, "STMmaxTics", 100);
 	my $locked = ReadingsVal($name,'locked',0);
+	if(AttrVal($name,"STMdevR","") eq "" && AttrVal($name,"STMdevL","") eq "" && AttrVal($name,"STMmaxDriveSeconds","") eq "")
+	{
+		readingsSingleUpdate($hash, "state", "missing Attributes",1);
+		return;
+	}
 	if($setOption eq "stop"){
-		STELLMOTOR_ImmediateStop($hash);
+		STM2_Stop($hash);
 		Log3($name, 4, "STELLMOTOR $name User submitted Stop Request");
 		return;
 	}elsif($setOption eq "reset"){
+		STM2_Stop($hash);
 		readingsBeginUpdate($hash);
 		## weitere Readings hinzufügen?
-		foreach("locked","queue_lastdiff"){
+		foreach("position","locked","td_lastdiff","tr_stop","ta_stopHR","tr_target","tr_actual","ta_lastStart","ta_stop","tr_start"){
 			readingsBulkUpdate($hash, $_ , 0);		
 			}
-		foreach("state","position"){
-			readingsBulkUpdate($hash, $_ , 1);		
+		foreach("state"){
+			readingsBulkUpdate($hash, $_ , "reset");		
 			}
 		readingsEndUpdate($hash, 1);
 		return;
 	}elsif($setOption eq "position" && $locked == 0){
-	 	if(length($args[2]) && $args[2] =~ /^\d+$/ && $args[2] >=0 && $args[2] <= $STMmaxTics){	
-		$TargetTics = $args[2];
-		readingsSingleUpdate($hash,"p_target",$args[2],1);
-		readingsSingleUpdate($hash,"t_target",$args[2]*($STMmaxDriveSeconds/$STMmaxTics),1);
+	 	if(length($args[2]) && $args[2] =~ /^\d+$/ && $args[2] >=0 && $args[2] <= $STMmaxDriveSeconds){	
+		readingsSingleUpdate($hash,"tr_target",$args[2],1);
+		Log3($name, 4, "$name set_position tr_target: $args[2]");
 		}
-	}elsif($setOption eq "?"){
-		my $usage = "Unknown argument $setOption, choose one of <tba>" . __LINE__;
-		return $usage;
+	}elsif ($setOption eq "?"){
+		return "Unknown argument ?, choose one of stop:noArg position reset:noArg";
 	}
 	if (IsDisabled($name)) {
 		readingsSingleUpdate($hash, "state", "disabled_138", 0); #save requested value to queue and return
 		Log3 $name, 4, "STELLMOTOR $name device is disabled";  
 		return;
 		}
-	}
 	# Was wissen wir hier: Wir wissen die Zielposition, wo wir hin sollen. 
 	#Um Herauszufinden, ob wir rechts oder links bewegen müssen, brauchen wir die aktuelle position
-	my $p_actual = ReadingsVal($name, "p_actual",0);
-	my $t_actual = ReadingsVal($name, "t_actual",0);
-	my $p_target = ReadingsVal($name, "p_target",0);
-	my $t_target = ReadingsVal($name, "t_target",0);
-	my $t_lastdiff = ReadingsVal($name,'queue_lastdiff',0); 
+	my $tr_actual = ReadingsVal($name, "tr_actual",0);
+	my $tr_target = ReadingsVal($name, "tr_target",0);
+	my $td_lastdiff = ReadingsVal($name,'td_lastdiff',0); 
 
+	Log3($name, 4, "$name Set: tr_actual: $tr_actual");
+	Log3($name, 4, "$name Set: tr_target: $tr_target");
+	Log3($name, 4, "$name Set: td_lastdiff: $td_lastdiff");
 	## jetzt haben wir die alten positionen und die übrige Differenz. 
-	#	
-	my $t_totalMove = $t_target - $t_actual + $t_lastdiff;
-
-	if($t_totalMove>0){ $cmd_move = "R"; }
-	elsif($t_totalMove<0){ $cmd_move = "L"; }
-	
-	$t_totalMove=abs($t_totalMove); #be shure to have positive moveCmdTime value
+	readingsSingleUpdate($hash,"tr_start", $tr_actual,1);
+	#save the actual start time position	
+	my $tr_totalMove = $tr_target - $tr_actual + $td_lastdiff;
+	Log3($name, 4, "$name Set: tr_totalMove: $tr_totalMove");
+	my $cmd_move;
+	if($tr_totalMove>0){ $cmd_move = "R"; }
+	elsif($tr_totalMove<0){ $cmd_move = "L"; }
+	readingsSingleUpdate($hash, "state", $cmd_move ,1);
+	# jetzt wissen wir, in welche Richtung der Motor laufen soll.
+	$tr_totalMove=abs($tr_totalMove); #be shure to have positive moveCmdTime value
 	readingsSingleUpdate($hash, "locked", 1, 1); #lock module for other commands
-	readingsSingleUpdate($hash,"t_lastStart", $now,1);
+	readingsSingleUpdate($hash,"ta_lastStart", $now,1);
+	#jetzt wissen wir, bis wann der Motor laufen soll
+	readingsSingleUpdate($hash, "ta_stop", ($now+$tr_totalMove), 1); #set the end time of the move
 
-	readingsSingleUpdate($hash, "t_stop", ($now+$t_totalMove), 1); #set the end time of the move
+	my $timestring = strftime "%Y-%m-%d %T",localtime($now + $tr_totalMove);
+	readingsSingleUpdate($hash,"ta_stopHR", $timestring,1);
+	STM2_commandSend($hash,$cmd_move);
+	STM2_GetUpdate($hash);    
 
-	my $timestring = strftime "%Y-%m-%d %T",localtime($now + $t_totalMove);
-	readingsSingleUpdate($hash,"t_stopHR", $timestring,1);
-
-
-	STELLMOTOR_commandSend($hash,$directionRL);
 	return;
 	}
-sub STELLMOTOR_ImmediateStop($@){
+sub STM2_ImmediateStop($@){
 	my ($hash,$option) = @_;
 	my $name = $hash->{NAME};
 	if(ReadingsVal($name,'locked', 1)==0){
@@ -156,109 +154,81 @@ sub STELLMOTOR_ImmediateStop($@){
 		}
 	}
 
-sub STELLMOTOR_Stop($@){
+sub STM2_Stop($@){
 	my ($hash,$option) = @_;
 	my $name = $hash->{NAME};
-	my $OutType = AttrVal($name,'STMOutType', "dummy");
-	if(($OutType ne "PiFace") and ($OutType ne "Gpio") and ($OutType ne "FhemDev") and ($OutType ne "SysCmd")){
-		return "OutType is ".$OutType.", please add Attribute STMOutType and choose one of <PiFace|Gpio|FhemDev|SysCmd>";	
-		}
-	STELLMOTOR_commandSend($hash,"S");
+  	RemoveInternalTimer($hash);
+	STM2_commandSend($hash,"S");
 	my $now = gettimeofday();
-	my $stopTime = ReadingsVal($name,"stopTime",$now);
+	my $ta_stop = ReadingsVal($name,"ta_stop",$now);
+	my $ta_lastStart = ReadingsVal($name,"ta_lastStart",$now);
+	my $tr_start = ReadingsVal($name,"tr_start","0");
 	my $STMmaxDriveSeconds = AttrVal($name, "STMmaxDriveSeconds", 107);
-	my $STMmaxTics = AttrVal($name, "STMmaxTics", 100);
+	my $td_diff = $now-$ta_stop;
+	readingsSingleUpdate($hash,'td_lastdiff',$td_diff,1); #update position reading
+	readingsSingleUpdate($hash, "locked", 0, 1); #unlock module for other commands
+	my $timeitranactually = $ta_stop-$ta_lastStart;
+	my $timeitreachedactually = $tr_start + $timeitranactually;
+	Log3($name, 4, "$name Stop: timeitranactually: $timeitranactually");
+	Log3($name, 4, "$name Stop: timeitreachedactually: $timeitreachedactually");
 
-	my $lastGuiState = ReadingsVal($name,'state', 1);
-	if(!($lastGuiState=~/^\d+$/)){
-		Log3($name, 3, "STELLMOTOR $name Stop Problem: lastGuiState:$lastGuiState please report this error L.".__LINE__);
-		$lastGuiState=1;
-		}
-	my $queue_lastdiff = ($stopTime-$now)*$STMmaxTics/$STMmaxDriveSeconds*(
-			(ReadingsVal($name,'position', 1)> $lastGuiState
-			)?1:-1);
-	#recalculate the position and write recalculated value to state
-	my($secPerTic)=AttrVal($name, "STMmaxDriveSeconds", 107)/AttrVal($name, "STMmaxTics", 100);  #now we have the time in seconds for 1 tic
-	my($posAdjust)= int($queue_lastdiff/$secPerTic);
-	my($position)=ReadingsVal($name,'position', "StopError");
-	$position-=$posAdjust;
-	$queue_lastdiff-=$posAdjust;
-	readingsSingleUpdate($hash,'position',$position,1); #update position reading
-	#update the readings after stop and post-proc
-	readingsSingleUpdate($hash, "queue_lastdiff", $queue_lastdiff, 1); #store time diff for next cmd
-	readingsSingleUpdate($hash, "locked", 0, 1); #unlock device
-	readingsSingleUpdate($hash, "stopTime", 0, 1); #reset stoptime to zero
-	readingsSingleUpdate($hash,'state',$position,1); #update position reading
-	if(ReadingsVal($name,'DoResetAtStop', "afterCalibrate") eq "afterCalibrate"){
-		readingsSingleUpdate($hash, "DoResetAtStop", gettimeofday(), 1); #set actual time = last calibrate
-		if(AttrVal($name,"STMresetOtherDeviceAtCalibrate",0)){
-			CommandSet(undef, AttrVal($name,"STMresetOtherDeviceAtCalibrate",0)." reset");
-			Log3($name, 4, "STELLMOTOR $name STMresetOtherDeviceAtCalibrate:".AttrVal($name,"STMresetOtherDeviceAtCalibrate",0));
-			}
-		STELLMOTOR_Set($hash,$name,"reset");
-		}
-	Log3($name, 4, "STELLMOTOR $name Stop Timing Call: stopTime:$stopTime now:$now queue_lastdiff:$queue_lastdiff");
-	}
+	readingsSingleUpdate($hash,'tr_actual',$timeitreachedactually,1); #update position reading
+		
 
-sub STELLMOTOR_GetUpdate($) {
+}
+
+sub STM2_GetUpdate($) {
 	my ($hash) = @_;
 	my $name = $hash->{NAME};
-	my $STMtimeTolerance = AttrVal($name, "STMtimeTolerance", 0.01);
-	my $stopTime = ReadingsVal($name,"stopTime", 0);
+	my $ta_stop = ReadingsVal($name,"ta_stop", 0);
+	my $ta_lastStart =  ReadingsVal($name,"ta_lastStart", 0);
 	my $now = gettimeofday();
-	if(($stopTime ne 0) and (($stopTime-$now)<$STMtimeTolerance)){
-		STELLMOTOR_Stop($hash);
-		}
-	my $command_queue = ReadingsVal($name,"command_queue", 0);
-	my $queue_lastdiff = ReadingsVal($name,"queue_lastdiff", 0);
-	my $locked = ReadingsVal($name,"locked", 0);
-	my $STMlastDiffMax = AttrVal($name, "STMlastDiffMax", 1);
-	my $position = ReadingsVal($name,"position", 1);
-	if($command_queue>0 and $locked==0){
-		Log3($name, 4, "STELLMOTOR $name command_queue Set Call: command_queue:$command_queue");
-		readingsSingleUpdate($hash, "command_queue", 0, 1); #remove old value from queue start the drive
-		STELLMOTOR_Set($hash,$name,$command_queue);
-	}elsif(abs($queue_lastdiff)>$STMlastDiffMax){ 				#start new drive if last diff > 1sec (attr: STMlastDiffMax)
-		Log3($name, 4, "STELLMOTOR $name queue_lastdiff over STMlastDiffMax Call: queue_lastdiff:$queue_lastdiff");
-		STELLMOTOR_Set($hash,$name,$position);
-		}
-	my $STMpollInterval = AttrVal($name, "STMpollInterval", 0.1);
-	if ($STMpollInterval ne "off") {
-		InternalTimer($now) + ($STMpollInterval), "STELLMOTOR_GetUpdate", $hash, 0);
-#		STELLMOTOR_Get($hash,"position");
-		}
-#fetch missing pos.value in state after reboot
-	my $lastGuiState = ReadingsVal($name,'state', 1);
-	if(!($lastGuiState=~/^\d+$/)){
-		Log3($name, 3, "STELLMOTOR $name Stop Problem: lastGuiState:$lastGuiState please report this error L.".__LINE__);
-		my $position = ReadingsVal($name,'position', "1");
-		readingsSingleUpdate($hash,'state',$position,1); #update position reading
-		$lastGuiState=1;
-		}
-#end debug
+	my $tr_actual = ReadingsVal($name, "tr_actual",0);
+	if($ta_stop == 0){
+		Log3($name, 4, "$name ta_stop: $ta_stop, stopzeit fehlerhaft!");
+		return;
+	}
+	readingsSingleUpdate($hash, "GetUpdate", $now, 1); 
+	Log3($name, 4, "$name getUpdate ta_stop: $ta_stop");
+	Log3($name, 4, "$name getUpdate now: $now");
+	Log3($name, 4, "$name getUpdate ta_stop - now:" . ($ta_stop-$now));
+	if(($ta_stop ne 0) and (($ta_stop-$now)<1)){
+		STM2_Stop($hash);
+		Log3($name, 4, "$name getUpdate STOP");
+		return;
+	}
+	my $tr_run = $now - $ta_lastStart; ## wie viele Sekunden läuft der Motor schon?  
+	Log3($name, 4, "STM2 $name getUpdate tr_run: $tr_run");
+	readingsSingleUpdate($hash, "tr_run", $tr_run, 1); 
+	my $tr_actual = $tr_actual + $tr_run; ## start + delta = aktuelle zeitposition
+	Log3($name, 4, "STM2 $name getUpdate tr_actual: $tr_actual");
+	readingsSingleUpdate($hash, "tr_actual", $tr_actual, 1); 
+	
+	InternalTimer($now + 0.5, "STM2_GetUpdate", $hash, 0);
 	return;
 	}
-sub STELLMOTOR_Get($@){
+
+sub STM2_Get($@){
 	my ($hash, @a) = @_;
 	my $name = $hash->{NAME};
-	return "bei get gibts keine Hilfe und keine Optionen";
+	##return "Unknown argument ?, choose one of stop:noArg position reset:noArg";
 	}
-sub STELLMOTOR_Notify(@) {
+sub STM2_Notify(@) {
   my ($hash, $dev) = @_;
   my $name = $hash->{NAME}; 
   if ($dev->{NAME} eq "global" && grep (m/^INITIALIZED$/,@{$dev->{CHANGED}})){
     Log3($name, 3, "STELLMOTOR $name initialized");
-    STELLMOTOR_GetUpdate($hash);    
+    STM2_GetUpdate($hash);    
   }
   return;
 }
-sub STELLMOTOR_Attr(@) {
+sub STM2_Attr(@) {
 	my ($cmd, $name, $attrName, $attrVal) = @_;
 	my $hash = $defs{$name};
-	return "noattr";
+	return;
 	}
 
-sub STELLMOTOR_Calibrate($@){
+sub STM2_Calibrate($@){
 #drive to left (or right if attr) for maximum time and call "set reset"
 	my ($hash,$option) = @_;
 	my $name = $hash->{NAME};
