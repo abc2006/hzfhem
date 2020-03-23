@@ -61,6 +61,7 @@
 #               before setting a new value to p-portion
 # V 1.0.0.10    Enhancement: enhanced Debugging in relation to i-Portion (abc2006)
 # V 1.0.0.11	Enhancement: PID is working also with actor device "none" (makes it possible to catch the value without additional Event by doif or FHEM2FHEM)
+# V 1.0.0.12    test
 ####################################################################################################
 package main;
 
