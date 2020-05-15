@@ -222,7 +222,7 @@ sub STM2_GetUpdate($) {
 		$position_actual -= $diff;
 	}
 	readingsSingleUpdate($hash, "position_actual", $position_actual,1);
-	readingsSingleUpdate($hash, "state", int($position_actual),1);
+	readingsSingleUpdate($hash, "state", int(10*$position_actual)/10,1);
 	
 				Log3($name, 4, "STM2 $name GetUpdate: diff: $diff");
 				Log3($name, 4, "STM2 $name GetUpdate: position_actual_post: $position_actual");
