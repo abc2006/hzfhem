@@ -61,7 +61,7 @@
 #               before setting a new value to p-portion
 # V 1.0.0.10    Enhancement: enhanced Debugging in relation to i-Portion (abc2006)
 # V 1.0.0.11	Enhancement: PID is working also with actor device "none" (makes it possible to catch the value without additional Event by doif or FHEM2FHEM)
-# V 1.0.0.12    test2
+# V 1.0.0.12    Enhancement: State "stopped" now survives a "shutdown restart"
 ####################################################################################################
 package main;
 
@@ -73,7 +73,7 @@ use vars qw($readingFnAttributes);
 use vars qw(%attr);
 use vars qw(%modules);
 
-my $PID20_Version = "1.0.0.11";
+my $PID20_Version = "1.0.0.12";
 sub PID20_Calc($);
 ########################################
 sub PID20_Log($$$)
@@ -203,7 +203,7 @@ sub PID20_Define($$$)
   }
   $hash->{helper}{actor}         = $actor;
   $hash->{helper}{actorCommand}  = ( defined($cmd) ) ? $cmd : '';
-  $hash->{helper}{stopped}       = 0;
+  #$hash->{helper}{stopped}       = ReadingsNum($name,'stopped',0);
   $hash->{helper}{adjust}        = '';
   $modules{PID20}{defptr}{$name} = $hash;
   readingsSingleUpdate( $hash, 'state', 'initializing', 1 );
@@ -360,14 +360,16 @@ sub PID20_Set($@)
     {
       return 'Set start needs a <value> parameter'
         if ( @a != 2 );
-      $hash->{helper}{stopped} = 0;
+      readingsSingleUpdate( $hash, 'stopped', '0', 1 );
+      #$hash->{helper}{stopped} = 0;
       PID20_RestartTimer($hash,1);
     }
     when ('stop')
     {
       return 'Set stop needs a <value> parameter'
         if ( @a != 2 );
-      $hash->{helper}{stopped} = 1;
+      readingsSingleUpdate( $hash, 'stopped', '1', 1 );
+      #$hash->{helper}{stopped} = 1;
       PID20_RestartTimer($hash,1);
     }
     when ('restart')
@@ -380,7 +382,8 @@ sub PID20_Set($@)
       #PID20_Log $hash, 1, "value:$value";
       return "value " . $a[2] . " is not a number"
         if ( !defined($value) );
-      $hash->{helper}{stopped} = 0;
+      readingsSingleUpdate( $hash, 'stopped', '0', 1 );
+      #$hash->{helper}{stopped} = 0;
       $hash->{helper}{adjust}  = $value;
       PID20_RestartTimer($hash,1);
       PID20_Log $hash, 3, "set $name $cmd $value";
@@ -499,7 +502,7 @@ sub PID20_Calc($)
       last;
     }
 
-    if ( $hash->{helper}{stopped} )
+    if ( ReadingsNum($name,'stopped',0) )
     {
       $stateStr = 'stopped';
       last;
