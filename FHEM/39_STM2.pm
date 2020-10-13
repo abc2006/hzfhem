@@ -154,12 +154,14 @@ Log3($name, 4, "$name Set: position_actual: $position_actual");
 		Log3($name, 4, "$name Set: starting calibration R");
 		$hash->{helper}{calibrationSeconds} = abs($position_target-$position_actual)+10; 	
 		$hash->{helper}{direction} = "R"; 
+		Log3($name, 4, "$name calibrationSeconds $hash->{helper}{calibrationSeconds}");
 		STM2_Calibrate($hash);
        		return;
        	}elsif($position_target == $STMmaxDriveSeconds){
 		Log3($name, 4, "$name Set: starting calibration L");
 		$hash->{helper}{calibrationSeconds} = abs($position_target-$position_actual)+10; 	
 		$hash->{helper}{direction} = "L"; 
+		Log3($name, 4, "$name calibrationSeconds $hash->{helper}{calibrationSeconds}");
 		STM2_Calibrate($hash);
 		return;
        	}
@@ -273,7 +275,9 @@ sub STM2_Calibrate($){
 	my $STMmaxDriveSeconds = AttrVal($name, "STMmaxDriveSeconds", 107);
 
 	readingsSingleUpdate($hash, "state", "calibrating", 1); 
-	readingsSingleUpdate($hash, "status", "calibrating", 1); 
+	readingsSingleUpdate($hash, "status", "calibrating", 1);
+
+	Log3($name, 4, "$name direction $hash->{helper}{direction}");
 	if($hash->{helper}{direction} eq "R"){	
 		Log3($name, 4, "$name CALIBRATION R");
 		readingsSingleUpdate($hash, "state", "calibrating to 0", 1); 
@@ -290,12 +294,20 @@ sub STM2_Calibrate($){
 		Log3($name, 4, "$name CALIBRATION RS");
 		STM2_commandSend($hash,"S");
 		CommandSet(undef,"$name reset");
+		readingsSingleUpdate($hash, "locked", 0, 1); #unlock module for other commands
 		readingsSingleUpdate($hash,"calibrated",$timestring,1);
+		readingsSingleUpdate($hash, "state", "calibrated", 1); 
+		readingsSingleUpdate($hash, "status", "calibrated", 1); 
+		$hash->{helper}{direction} = "";
 	} elsif ($hash->{helper}{direction} eq "LS"){
 		Log3($name, 4, "$name CALIBRATION LS");
 		STM2_commandSend($hash,"S");
-		readingsSingleUpdate($hash,"position_actual","150",1);
+		readingsSingleUpdate($hash, "locked", 0, 1); #unlock module for other commands
+		readingsSingleUpdate($hash,"position_actual","$STMmaxDriveSeconds",1);
 		readingsSingleUpdate($hash,"calibrated",$timestring,1);
+		readingsSingleUpdate($hash, "state", "calibrated", 1); 
+		readingsSingleUpdate($hash, "status", "calibrated", 1); 
+		$hash->{helper}{direction} = "";
 	}
 	return;
 	}
