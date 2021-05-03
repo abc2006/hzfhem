@@ -150,14 +150,14 @@ sub STM2_Set($@) {
 
 Log3($name, 4, "$name Set: position_actual: $position_actual");
 	Log3($name, 4, "$name Set: position_target: $position_target");
-	if($position_target == 0){
+	if($position_target == 0 && $position_actual != 0){
 		Log3($name, 4, "$name Set: starting calibration R");
 		$hash->{helper}{calibrationSeconds} = abs($position_target-$position_actual)+10; 	
 		$hash->{helper}{direction} = "R"; 
 		Log3($name, 4, "$name calibrationSeconds $hash->{helper}{calibrationSeconds}");
 		STM2_Calibrate($hash);
        		return;
-       	}elsif($position_target == $STMmaxDriveSeconds){
+       	}elsif($position_target == $STMmaxDriveSeconds && $position_actual != $STMmaxDriveSeconds){
 		Log3($name, 4, "$name Set: starting calibration L");
 		$hash->{helper}{calibrationSeconds} = abs($position_target-$position_actual)+10; 	
 		$hash->{helper}{direction} = "L"; 
